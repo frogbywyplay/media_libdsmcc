@@ -1,0 +1,8 @@
+Sun Sep  7 14:56:05 BST 2003
+
+	- Fixed bug in attaching previously arrived files to newly arrived
+	  directories. Upto now only the first file was being attached.
+	  (with lots of help and sample transport streams from Oskar Signell)
+
+	- (from Ville Ollikainen) Not opening binary files correctly under
+	   windows, fixed.
