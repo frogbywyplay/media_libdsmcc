@@ -553,6 +553,9 @@ dsmcc_cache_file(struct cache *filecache, struct biop_message *bm, struct cache_
 			last->next = file;
 			file->prev = last;
 		}
+
+		filecache->num_files++; filecache->total_files++;
+
 	} else {
 		/* Save data. Save file if wanted  (TODO check versions ) */
 		if(filecache->debug_fd != NULL) {
@@ -577,6 +580,7 @@ void
 dsmcc_cache_write_file(struct cache *filecache, struct cache_file *file) {
 	FILE *data_fd;
 	char buf[128];
+        struct file_info *filei, *files;
 
 	/* TODO create directory structure rather than one big mess! */
 
@@ -594,6 +598,22 @@ dsmcc_cache_write_file(struct cache *filecache, struct cache_file *file) {
 	  file->data = NULL; file->data_len = 0;
 
 	  filecache->num_files--;
+
+          /* Update information in file info */
+          filei = malloc(sizeof(struct file_info));
+          filei->filename = malloc(sizeof(file->filename)+1);
+          strcpy(filei->filename, file->filename);
+          filei->path = malloc(sizeof(buf)+1);
+          strcpy(filei->path, buf);
+          filei->arrived = filei->written = 1;
+          if(filecache->files == NULL) {
+                filecache->files = filei;
+          } else {
+                for(files=filecache->files;files->next!=NULL;files=files->next)
+{ ; }
+                files->next = filei;
+          }
+          filei->next = NULL;
 	} else {
 	 if(filecache->debug_fd != NULL) {
 /*	   fprintf(filecache->debug_fd,"[libcache] File %s Parent == %p Dirpath == %s\n", file->filename, file->parent, file->parent->dirpath);

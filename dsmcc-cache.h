@@ -44,6 +44,16 @@ struct cache_file {
 	char *p_key;
 };
 
+struct file_info {
+        char *filename;
+        char *path;
+        unsigned int size;
+        char arrived;
+        char written;
+        struct file_info *next;
+};
+
+
 struct cache {
 	struct cache_dir *gateway;
 	struct cache_dir  *dir_cache;
@@ -53,6 +63,9 @@ struct cache {
 	int num_dirs, total_dirs;
 	char *name;
 	FILE *debug_fd;
+
+
+	struct file_info *files;
 };
 
 unsigned int dsmcc_cache_key_cmp(char *, char *, unsigned int, unsigned int);
