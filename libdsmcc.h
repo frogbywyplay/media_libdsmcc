@@ -29,8 +29,9 @@ struct dsmcc_status {
 	int rec_dirs,  total_dirs;
 	int gzip_size, total_size;
 	enum cachestate { EMPTY, LISTINGS, FILLING, FULL } state;
+	enum running { NOTRUNNING, RUNNINGSOON, PAUSED, RUNNING };
 
-	char *name;
+	char *channel_name;
 
 	/* must check to see if any new streams to subscribe to after calling
 	   receive each time (new stream info comes from within dsmcc */
