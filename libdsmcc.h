@@ -1,6 +1,10 @@
 #ifndef LIBDSMCC_H
 #define LIBDSMCC_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <syslog.h>
 #include "dsmcc-receiver.h"
 #include "dsmcc-carousel.h"
@@ -52,4 +56,7 @@ void dsmcc_receive(struct dsmcc_status *status, unsigned char *Data, int Length)
 void dsmcc_close(struct dsmcc_status *status);
 void dsmcc_free(struct dsmcc_status *status);
 
+#ifdef __cplusplus
+}
+#endif
 #endif

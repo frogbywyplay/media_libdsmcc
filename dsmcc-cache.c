@@ -37,6 +37,8 @@ dsmcc_cache_init(struct cache *filecache, const char *channel_name, FILE *debug_
 	filecache->num_files = filecache->num_dirs = filecache->total_files 
 		= filecache->total_dirs = 0;
 
+	filecache->files = NULL;
+
 	filecache->debug_fd = debug_fd;
 }
 
@@ -601,9 +603,9 @@ dsmcc_cache_write_file(struct cache *filecache, struct cache_file *file) {
 
           /* Update information in file info */
           filei = malloc(sizeof(struct file_info));
-          filei->filename = malloc(sizeof(file->filename)+1);
+          filei->filename = malloc(strlen(file->filename)+1);
           strcpy(filei->filename, file->filename);
-          filei->path = malloc(sizeof(buf)+1);
+          filei->path = malloc(strlen(buf)+1);
           strcpy(filei->path, buf);
           filei->arrived = filei->written = 1;
           if(filecache->files == NULL) {

@@ -1,4 +1,8 @@
 
+Wed Oct 29 08:14:04 GMT 2003
+
+	- Fixed file listings to actually work...
+
 Tue Oct 28 12:55:48 GMT 2003
 
 	- Added code to return list of file written to disk. Needs to be
