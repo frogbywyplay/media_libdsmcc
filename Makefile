@@ -32,7 +32,7 @@
 
 CC = gcc
 CFLAGS ?= -g -Wmissing-prototypes -Wstrict-prototypes \
-         -DNAPI -Wimplicit -D__USE_FIXED_PROTOTYPES__ # -ansi -pedantic 
+         -DNAPI -Wimplicit -D__USE_FIXED_PROTOTYPES__ -fPIC # -ansi -pedantic 
 
 INCDIRS = -I../../../../../DVB 
 DISTDIR = ../lib
@@ -44,14 +44,15 @@ AR = ar
 ARFLAGS = ru
 RANLIB = ranlib
 
-SILIB = libdsmcc.a
+SLIB = libdsmcc.so
 OBJS = dsmcc-receiver.o dsmcc-util.o dsmcc-descriptor.o dsmcc-biop.o dsmcc-carousel.o dsmcc-cache.o dsmcc.o
+SOFLAGS ?= -shared -Wl,-soname,$(SLIB) -o $(SLIB)
 
-all : $(SILIB)
+all : $(SLIB)
 
 clean :
 	@echo cleaning workspace...
-	@rm -f $(OBJS) $(SILIB) *~
+	@rm -f $(OBJS) $(SLIB) *~
 	@rm -f Makefile.dep
 
 depend : Makefile.dep
@@ -63,18 +64,17 @@ Makefile.dep :
 new : clean depend all
 
 dist: all
-	@echo "distributing $(SILIB) to $(DISTDIR)..."
-	@cp $(SILIB) $(DISTDIR)
+	@echo "distributing $(SLIB) to $(DISTDIR)..."
+	@cp $(SLIB) $(DISTDIR)
 	@cp $(INCLUDES) $(DISTINCDIR)
-	@$(RANLIB) $(DISTDIR)/$(SILIB)
+	@$(RANLIB) $(DISTDIR)/$(SLIB)
 
-$(SILIB) : $(OBJS)
-	@echo updating library...
-	@$(AR) $(ARFLAGS) $(SILIB) $(OBJS)
-	@$(RANLIB) $(SILIB)
+$(SLIB) : $(OBJS)
+	@echo "create shared library"
+	$(CC) $(SOFLAGS) $(LDFLAGS) -o $(SLIB) $(OBJS)
 
 .c.o : 
 	@echo compiling $<...
-	@$(CC) $(DEFINES) $(CFLAGS) $(INCDIRS) -c $<
+	$(CC) $(DEFINES) $(CFLAGS) $(INCDIRS) -c $<
 
 -include Makefile.dep
