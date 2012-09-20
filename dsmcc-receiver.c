@@ -1,8 +1,15 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
-#include <zlib.h>
+//#include <zlib.h>
+#include <errno.h>
+#include <unistd.h>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "dsmcc-receiver.h"
 #include "dsmcc-descriptor.h"
@@ -440,7 +447,6 @@ dsmcc_process_section_indication(struct dsmcc_status *status, unsigned char *Dat
 	}
 
 }
- 
 
 void
 dsmcc_add_module_info(struct dsmcc_status *status, struct dsmcc_section *section, struct obj_carousel *car) {
@@ -479,7 +485,13 @@ dsmcc_add_module_info(struct dsmcc_status *status, struct dsmcc_section *section
         		        dsmcc_desc_free(last); 
                             }
         	        }
-         		if(cachep->data != NULL) { free(cachep->data); }
+
+         		if(cachep->data_file != NULL)
+         		{
+         		    unlink(cachep->data_file);
+         		    free(cachep->data_file);
+         		    cachep->data_file = NULL;
+         		}
                 	if(cachep->prev != NULL) {
                     	    cachep->prev->next = cachep->next;
 			    if(cachep->next!=NULL) {
@@ -501,6 +513,7 @@ dsmcc_add_module_info(struct dsmcc_status *status, struct dsmcc_section *section
 	        if(status->debug_fd != NULL) {
 		  fprintf(status->debug_fd, "[libdsmcc] Saving info for module %d\n", dii->modules[i].module_id); 
 		}
+
 	        if(car->cache != NULL) {
 	           for(cachep=car->cache;
 			cachep->next!=NULL;cachep=cachep->next) {;}
@@ -517,15 +530,17 @@ dsmcc_add_module_info(struct dsmcc_status *status, struct dsmcc_section *section
                 cachep->module_id = dii->modules[i].module_id;
                 cachep->version = dii->modules[i].module_version;
                 cachep->size = dii->modules[i].module_size;
+                cachep->block_size = dii->block_size;
                 cachep->curp = cachep->block_num = 0;
 		num_blocks = cachep->size / dii->block_size;
+
 		if((cachep->size % dii->block_size) != 0)
 			num_blocks++;
 		cachep->bstatus=(char*)malloc(((num_blocks/8)+1)*sizeof(char));
 		bzero(cachep->bstatus, (num_blocks/8)+1);
 /*		syslog(LOG_ERR, "Allocated %d bytes to store status for module %d",
 				(num_blocks/8)+1, cachep->module_id);
- */               cachep->data = NULL;
+ */             asprintf(&cachep->data_file, "/tmp/cache/tmp/%lu-%hu-%hhu.data", cachep->carousel_id, cachep->module_id, cachep->version);
 	        cachep->next = NULL;
 		cachep->blocks = NULL;
                 cachep->tag = dii->modules[i].modinfo.tap.assoc_tag;
@@ -611,8 +626,6 @@ dsmcc_process_section_block(struct dsmcc_status *status, struct dsmcc_section *s
 
 	ddb->next = NULL;	/* Not used here, used to link all data blocks
 				   in order in AddModuleData. Hmmm. */
-	ddb->blockdata = NULL;
-
         if(status->debug_fd != NULL) {
 	       fprintf(status->debug_fd, "[libdsmcc] Data Block ModID %d Pos %d Version %d\n", ddb->module_id, ddb->block_number, ddb->module_version);
 	}
@@ -650,6 +663,9 @@ dsmcc_add_module_data(struct dsmcc_status *status, struct dsmcc_section *section
 	struct descriptor *desc = NULL;
 	struct dsmcc_ddb *lb, *pb, *nb, *ddb = &section->msg.ddb;
 	struct obj_carousel *car;
+	int fd;
+	off_t seeked;
+	ssize_t wret;
 
 	i = ret = 0;
 
@@ -696,8 +712,47 @@ dsmcc_add_module_data(struct dsmcc_status *status, struct dsmcc_section *section
 		/* Check if we have this block already or not. If not append
 		 * to list
 		 */
+
+
 	       if(BLOCK_GOT(cachep->bstatus, ddb->block_number) == 0) {
-		 if((cachep->blocks==NULL)||(cachep->blocks->block_number>ddb->block_number)) {
+	         fd = open(cachep->data_file, O_WRONLY | O_CREAT, 0666);
+                 if(fd < 0)
+                 {
+                  if(status->debug_fd != NULL) {
+                         fprintf(status->debug_fd, "[libdsmcc] can't open temporary file '%s' : %s\n", cachep->data_file, strerror(errno));
+                   }
+                   return;
+                 }
+
+                 if((seeked = lseek(fd, ddb->block_number * cachep->block_size, SEEK_SET)) < 0)
+                 {
+                   if(status->debug_fd != NULL) {
+                          fprintf(status->debug_fd, "[libdsmcc] can't seek '%s' : %s\n", cachep->data_file, strerror(errno));
+                    }
+                    return;
+                  }
+
+                 if((wret = write(fd, Data, ddb->len)) < ddb->len)
+                 {
+                   if(wret >= 0)
+                   {
+                       if(status->debug_fd != NULL)
+                           fprintf(status->debug_fd, "[libdsmcc] error : partial write '%s' : %d/%d\n", cachep->data_file, wret, ddb->len);
+                   }
+                   else
+                   {
+                       if(status->debug_fd != NULL) {
+                           fprintf(status->debug_fd, "[libdsmcc] write error '%s' : %s\n", cachep->data_file, strerror(errno));
+                       }
+                   }
+
+                   close(fd);
+                   return;
+                 }
+
+                 close(fd);
+
+	         if((cachep->blocks==NULL)||(cachep->blocks->block_number>ddb->block_number)) {
 		    nb=cachep->blocks;	/* NULL or previous first in list */
 		    cachep->blocks=(struct dsmcc_ddb*)malloc(sizeof(struct dsmcc_ddb));
 		    lb=cachep->blocks;
@@ -714,8 +769,6 @@ dsmcc_add_module_data(struct dsmcc_status *status, struct dsmcc_section *section
 		 lb->module_id = ddb->module_id;
 		 lb->module_version = ddb->module_version;
 		 lb->block_number = ddb->block_number;
-		 lb->blockdata = (unsigned char*)malloc(ddb->len); 
-		 memcpy(lb->blockdata, Data, ddb->len);
 		 lb->len = ddb->len;
 		 cachep->curp += ddb->len;
 		 lb->next = nb;
@@ -732,18 +785,18 @@ dsmcc_add_module_data(struct dsmcc_status *status, struct dsmcc_section *section
 	  		fprintf(status->debug_fd, "[libdsmcc] Reconstructing module %d from blocks\n", cachep->module_id);
 	   	}
 	       /* Re-assemble the blocks into the complete module */
-		cachep->data = (unsigned char*)malloc(cachep->size);
+		//cachep->data = (unsigned char*)malloc(cachep->size);
 	   	cachep->curp = 0;
 	 	pb=lb=cachep->blocks;
 		while(lb!=NULL) {
-		  memcpy(cachep->data+cachep->curp,lb->blockdata,lb->len);
-		  cachep->curp += lb->len;
+		  //memcpy(cachep->data+cachep->curp,lb->blockdata,lb->len);
+		  //cachep->curp += lb->len;
 
 		  pb=lb; lb=lb->next;
 
-		  if(pb->blockdata!=NULL)
-		    free(pb->blockdata);
-		    free(pb);
+		  //if(pb->blockdata!=NULL)
+		  //  free(pb->blockdata);
+		  free(pb);
 	       }
 	       cachep->blocks = NULL;
 
@@ -752,6 +805,20 @@ dsmcc_add_module_data(struct dsmcc_status *status, struct dsmcc_section *section
 		       if(desc && (desc->tag == 0x09)) { break; }
 	       }
 	       if(desc != NULL) {
+	           if(status->debug_fd != NULL) {
+                       fprintf(status->debug_fd, "[libdsmcc] compression disabled - too bad, skipping\n");
+                   }
+	           if(cachep->data_file)
+	           {
+	               unlink(cachep->data_file);
+                       free(cachep->data_file);
+                       cachep->data_file = NULL;
+	           }
+
+                   cachep->curp = 0;
+
+                   return;
+#if 0
 //	           syslog(LOG_ERR, "Uncompressing...(%lu bytes compressed - %lu bytes memory", cachep->curp, desc->data.compressed.original_size);
 
 		   data_len=desc->data.compressed.original_size+1;
@@ -806,6 +873,7 @@ dsmcc_add_module_data(struct dsmcc_status *status, struct dsmcc_section *section
 		   // Return list of streams that directory needs
 		   dsmcc_biop_process_data(car->filecache, cachep);
 		   cachep->cached = 1;
+#endif
 		} else {
 		   /* not compressed */
                    if(status->debug_fd != NULL) {

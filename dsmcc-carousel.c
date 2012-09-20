@@ -43,10 +43,11 @@ void dsmcc_objcar_free(struct obj_carousel *obj) {
 	cachep = obj->cache;
 	while(cachep!=NULL) {
 	      cachepnext = cachep->next;
+#if 0
 	      if(cachep->data != NULL) { /* should be empty */
 		      free(cachep->data);
 	      }
-
+#endif
 	      if(cachep->bstatus != NULL) {
 		      free(cachep->bstatus);
 	      }

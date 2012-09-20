@@ -1,6 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <errno.h>
+#include <unistd.h>
 
 #include <syslog.h>
 
@@ -24,7 +30,7 @@ struct biop_streamevent *
 int
 dsmcc_biop_process_msg_hdr(struct biop_message *bm, struct cache_module_data *cachep) {
 	struct biop_msg_header *hdr = &bm->hdr;
-	unsigned char *Data = cachep->data + cachep->curp;
+	unsigned char *Data = cachep->data_ptr + cachep->curp;
 	int off = 0;
 
 	if(Data == NULL) { 
@@ -178,7 +184,7 @@ dsmcc_biop_process_binding(struct biop_binding *bind, unsigned char *Data) {
 int dsmcc_biop_process_srg(struct biop_message *bm,struct cache_module_data *cachep, struct cache *filecache) {
 	unsigned int i;
 	int off = 0, ret;
-	unsigned char *Data = cachep->data + cachep->curp;
+	unsigned char *Data = cachep->data_ptr + cachep->curp;
 
 	off++; /* skip service context count */
 
@@ -239,7 +245,7 @@ dsmcc_biop_free_binding(struct biop_binding *binding) {
 void dsmcc_biop_process_dir(struct biop_message *bm, struct cache_module_data *cachep, struct cache *filecache){
 	unsigned int i;
 	int off = 0, ret;
-	unsigned char *Data = cachep->data + cachep->curp;
+	unsigned char *Data = cachep->data_ptr + cachep->curp;
 
 	off++; /* skip service context count */
 
@@ -275,7 +281,7 @@ void dsmcc_biop_process_dir(struct biop_message *bm, struct cache_module_data *c
 void
 dsmcc_biop_process_file(struct biop_message *bm,struct cache_module_data *cachep, struct cache *filecache){
 	int off = 0;
-	unsigned char *Data = cachep->data+cachep->curp;
+	unsigned char *Data = cachep->data_ptr+cachep->curp;
 
 	/* skip service contect count */
 
@@ -301,6 +307,35 @@ dsmcc_biop_process_file(struct biop_message *bm,struct cache_module_data *cachep
 	dsmcc_cache_file(filecache, bm, cachep);
 
 	cachep->curp += bm->body.file.content_len;
+}
+
+int
+dsmcc_biop_nmap_data(struct cache *filecache, struct cache_module_data *cachep)
+{
+    int fd;
+    int err;
+
+    fd = open(cachep->data_file, O_RDONLY);
+    if(fd < 0)
+    {
+        if(filecache->debug_fd != NULL) {
+            fprintf(filecache->debug_fd, "[libdsmcc] can't open temporary file '%s' : %s\n", cachep->data_file, strerror(errno));
+        }
+        return -1;
+    }
+
+    cachep->data_ptr = mmap(NULL, cachep->size, PROT_READ, MAP_PRIVATE, fd, 0);
+    err = errno;
+    close(fd);
+    if(cachep->data_ptr == MAP_FAILED)
+    {
+        if(filecache->debug_fd != NULL) {
+            fprintf(filecache->debug_fd, "[libdsmcc] mmap failed on '%s' : %s\n", cachep->data_file, strerror(err));
+        }
+        return -1;
+    }
+
+    return 0;
 }
 
 void
@@ -329,6 +364,11 @@ dsmcc_biop_process_data(struct cache *filecache, struct cache_module_data *cache
 		fprintf(filecache->debug_fd, "[libbiop] Module size (uncompressed) = %d\n", len);
 	}
 //	fprintf(bd_fd, "Full Length - %d\n", len);
+
+	if(dsmcc_biop_nmap_data(filecache, cachep) < 0)
+	{
+	    return;
+	}
 
 	/* Replace off with cachep->curp.... */
 	while(cachep->curp < len) {
@@ -381,7 +421,14 @@ dsmcc_biop_process_data(struct cache *filecache, struct cache_module_data *cache
 		free(bm.hdr.objinfo);
 	}
 
-//	fclose(bd_fd);
+	if(munmap(cachep->data_ptr, cachep->size) < 0)
+	{
+	    if(filecache->debug_fd != NULL) {
+                fprintf(filecache->debug_fd, "[libbiop] munmap error : %s\n", strerror(errno));
+            }
+	}
+
+	    //	fclose(bd_fd);
 
 }
 

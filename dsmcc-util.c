@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include <zlib.h>
+//#include <zlib.h>
 
 #include "dsmcc-util.h"
 

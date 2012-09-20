@@ -6,6 +6,8 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
+#include <errno.h>
 #include "dsmcc-cache.h"
 #include "dsmcc-biop.h"
 #include "dsmcc-receiver.h"
@@ -33,6 +35,7 @@ dsmcc_cache_init(struct cache *filecache, const char *channel_name, FILE *debug_
 	}
 
 	mkdir("/tmp/cache", 0755);	/* By popular demand... */
+	mkdir("/tmp/cache/tmp", 0755);
 
 	filecache->num_files = filecache->num_dirs = filecache->total_files 
 		= filecache->total_dirs = 0;
@@ -53,7 +56,7 @@ dsmcc_cache_free(struct cache *filecache) {
 	  fn = f->next;
 	  if(f->key_len>0) { free(f->key); }
 	  if(f->filename!=NULL) { free(f->filename); }
-	  if(f->data!=NULL) { free(f->data); }
+	  if(f->module_data_file!=NULL) { free(f->module_data_file); }
 	  if(f->p_key_len>0) { free(f->p_key); }
 	  free(f);
 	  f = fn;
@@ -63,7 +66,7 @@ dsmcc_cache_free(struct cache *filecache) {
 	while(f!=NULL) {
 	  fn = f->next;
 	  if(f->key_len>0) { free(f->key); }
-	  if(f->data!=NULL) { free(f->data); }
+	  if(f->module_data_file!=NULL) { free(f->module_data_file); }
 	  free(f);
 	  f = fn;
 	}
@@ -80,7 +83,7 @@ dsmcc_cache_free(struct cache *filecache) {
 	    fn = f->next;
 	    if(f->key_len>0) { free(f->key); }
 	    if(f->filename!=NULL) { free(f->filename); }
-	    if(f->data!=NULL) { free(f->data); }
+	    if(f->module_data_file!=NULL) { free(f->module_data_file); }
 	    if(f->p_key_len>0) { free(f->p_key); }
 	    free(f);
 	    f = fn;
@@ -124,7 +127,7 @@ dsmcc_cache_free_dir(struct cache_dir *d) {
 	  fn = f->next;
 	  if(f->key_len>0) { free(f->key); }
 	  if(f->filename!=NULL) { free(f->filename); }
-	  if(f->data!=NULL) { free(f->data); }
+	  if(f->module_data_file!=NULL) { free(f->module_data_file); }
 	  if(f->p_key_len>0) { free(f->p_key); }
 	  free(f);
 	  f = fn;
@@ -417,7 +420,7 @@ dsmcc_cache_dir_info(struct cache *filecache, unsigned short module_id, unsigned
 	dir->parent = dsmcc_cache_dir_find(filecache, dir->carousel_id, module_id, objkey_len, objkey);
 
 	if(filecache->debug_fd != NULL) {
-		fprintf(filecache->debug_fd,"[libcache] Caching dir %s (with parent %d/%d/%c%c%c%c\n", dir->name, dir->p_module_id, dir->p_key_len, dir->p_key[0], dir->p_key[1], dir->p_key[2]);
+		fprintf(filecache->debug_fd,"[libcache] Caching dir %s (with parent %d/%d/%c%c%c\n", dir->name, dir->p_module_id, dir->p_key_len, dir->p_key[0], dir->p_key[1], dir->p_key[2]);
 	}
 
 	if(dir->parent == NULL) {
@@ -503,7 +506,7 @@ dsmcc_cache_write_dir(struct cache *filecache, struct cache_dir *dir) {
 	/* Write out files that had arrived before directory */
 
 	for(file=dir->files;file!=NULL;file=file->next) {
-		if(file->data != NULL) {
+		if(file->offset != 0) {
 			if(filecache->debug_fd != NULL) {
 				fprintf(filecache->debug_fd,"[libcache] Writing out file %s under new dir %s\n", file->filename, dir->dirpath);
 	  		}
@@ -536,9 +539,8 @@ dsmcc_cache_file(struct cache *filecache, struct biop_message *bm, struct cache_
 
 		file = (struct cache_file *)malloc(sizeof(struct cache_file));
 		file->data_len = bm->body.file.content_len;
-		file->data = (char*)malloc(file->data_len);
-		memcpy(file->data, cachep->data+cachep->curp,
-						file->data_len);
+		file->offset = cachep->curp;
+		file->module_data_file = strdup(cachep->data_file);
 		file->carousel_id= cachep->carousel_id;
 		file->module_id= cachep->module_id;
 		file->key_len= bm->hdr.objkey_len;
@@ -563,11 +565,10 @@ dsmcc_cache_file(struct cache *filecache, struct biop_message *bm, struct cache_
 		if(filecache->debug_fd != NULL) {
 			fprintf(filecache->debug_fd,"[libcache] Data for file %s\n", file->filename);
 	  	}
-		if(file->data == NULL) {
+		if(file->offset == 0) {
 			file->data_len = bm->body.file.content_len;
-			file->data = (char *)malloc(file->data_len);
-			memcpy(file->data,cachep->data+cachep->curp,
-							file->data_len);
+			file->offset = cachep->curp;
+			file->module_data_file = strdup(cachep->data_file);
 			/* TODO this should be a config option */
 			dsmcc_cache_write_file(filecache, file);
 		} else {
@@ -580,9 +581,11 @@ dsmcc_cache_file(struct cache *filecache, struct biop_message *bm, struct cache_
 
 void
 dsmcc_cache_write_file(struct cache *filecache, struct cache_file *file) {
-	FILE *data_fd;
+	FILE *data_fd, *module_fd;
 	char buf[128];
+	char *data_buf;
         struct file_info *filei, *files;
+        unsigned long copied, cp_size, rret, wret;
 
 	/* TODO create directory structure rather than one big mess! */
 
@@ -591,13 +594,85 @@ dsmcc_cache_write_file(struct cache *filecache, struct cache_file *file) {
 	  if(filecache->debug_fd != NULL) {
 		fprintf(filecache->debug_fd,"[libcache] Writing file %s/%s (%d bytes)\n", file->parent->dirpath, file->filename, file->data_len);
 	  }
+
+	  module_fd = fopen(file->module_data_file, "r");
+	  if(module_fd == NULL)
+	  {
+	      if(filecache->debug_fd != NULL) fprintf(filecache->debug_fd, "[libcache] cached module file open error '%s': %s\n", file->module_data_file, strerror(errno));
+	      return;
+	  }
+	  if(fseek(module_fd, file->offset, SEEK_SET) < 0)
+	  {
+	      if(filecache->debug_fd != NULL) fprintf(filecache->debug_fd, "[libcache] cached module file seek error '%s': %s\n", file->module_data_file, strerror(errno));
+	      fclose(module_fd);
+	      return;
+	  }
+
 	  sprintf(buf,"/tmp/cache/%s/%s/%s", filecache->name, file->parent->dirpath, file->filename);
 	  data_fd = fopen(buf, "wb");
-	  fwrite(file->data, 1, file->data_len, data_fd);
+
+
+	  data_buf = malloc(1024*1024);
+	  copied = 0;
+	  int err = 0;
+	  while(copied < file->data_len)
+	  {
+	      cp_size = file->data_len-copied > 1024*1024 ? 1024*1024 : file->data_len-copied; // max
+	      rret = fread(data_buf, 1, cp_size, module_fd);
+	      if(rret > 0)
+	      {
+	          wret = fwrite(data_buf, 1, rret, data_fd);
+	          if(wret < rret)
+	          {
+	              if(wret < 0)
+	              {
+	                  if(filecache->debug_fd != NULL)
+	                      fprintf(filecache->debug_fd, "[libcache] write error '%s': %s\n", buf, strerror(errno));
+	              }
+	              else
+	              {
+	                  if(filecache->debug_fd != NULL)
+	                      fprintf(filecache->debug_fd, "[libcache] short write '%s'", buf);
+	              }
+
+	              err = 1;
+	              break;
+	          }
+	          copied += wret;
+	      }
+	      else
+	      {
+	          if(rret < 0)
+	          {
+	              if(filecache->debug_fd != NULL)
+	                  fprintf(filecache->debug_fd, "[libcache] read error '%s': %s\n", file->module_data_file, strerror(errno));
+	          }
+	          else
+	          {
+	              if(filecache->debug_fd != NULL)
+	                  fprintf(filecache->debug_fd, "[libcache] unexpected EOF '%s'\n", file->module_data_file);
+	          }
+
+	          err = 1;
+	          break;
+	      }
+	  }
+
+	  free(data_buf);
+	  fclose(module_fd);
 	  fclose(data_fd);
+
+	  if(err == 1)
+	  {
+	      unlink(buf);
+	      return;
+	  }
+
 	  /* Free data as no longer needed */
-	  free(file->data);
-	  file->data = NULL; file->data_len = 0;
+	  file->offset = 0;
+	  free(file->module_data_file);
+	  file->module_data_file = NULL;
+	  file->data_len = 0;
 
 	  filecache->num_files--;
 
@@ -722,7 +797,8 @@ dsmcc_cache_file_info(struct cache *filecache, unsigned short mod_id, unsigned i
 		newfile->key= (char *)malloc(newfile->key_len);
 		memcpy(newfile->key, bind->ior.body.full.obj_loc.objkey,
 							newfile->key_len);
-		newfile->data = NULL;
+		newfile->module_data_file = NULL;
+		newfile->offset = 0;
 	} else {
 		if(filecache->debug_fd != NULL) {
 			fprintf(filecache->debug_fd,"[libcache] Data already arrived for file %s\n", bind->name.comps[0].id);
@@ -775,7 +851,7 @@ dsmcc_cache_file_info(struct cache *filecache, unsigned short mod_id, unsigned i
 			fprintf(filecache->debug_fd,"[libcache] Caching info for file %s with known parent dir (file info - %ld/%d/%d/%c%c%c)\n", newfile->filename, newfile->carousel_id, newfile->module_id, newfile->key_len, newfile->key[0], newfile->key[1], newfile->key[2]);
 		}
 
-		if(newfile->data != NULL)
+		if(newfile->offset != 0)
 			dsmcc_cache_write_file(filecache, newfile);
 	}
 }

@@ -39,14 +39,16 @@ struct cache_module_data {
 
 	unsigned char version;
 	unsigned long size;
+	unsigned long block_size;
 	unsigned long curp;
 
 	unsigned short block_num;
 	char *bstatus;	/* Block status bit field */
 	struct dsmcc_ddb *blocks;
+	char *data_file;
+	unsigned char *data_ptr;
 	char cached;
 
-	unsigned char *data;
 	unsigned short tag;
 
 	struct cache_module_data *next, *prev;
@@ -121,7 +123,7 @@ struct dsmcc_ddb {
 	unsigned short module_id;
 	unsigned char module_version;
 	unsigned short block_number;
-	unsigned char *blockdata;
+
 	unsigned int len;
 	struct dsmcc_ddb *next;	/* Needed for caching */
 };

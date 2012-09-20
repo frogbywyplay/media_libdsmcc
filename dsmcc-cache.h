@@ -34,7 +34,8 @@ struct cache_file {
 	char *key;
 	unsigned int data_len;
 	char *filename;
-	char *data;
+	unsigned long offset;
+	char *module_data_file;
 	char complete;
 	struct cache_file *next, *prev;;
 	struct cache_dir *parent;
