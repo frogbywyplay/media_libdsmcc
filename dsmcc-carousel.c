@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "dsmcc-receiver.h"
 #include "dsmcc-descriptor.h"
@@ -48,6 +49,12 @@ void dsmcc_objcar_free(struct obj_carousel *obj) {
 		      free(cachep->data);
 	      }
 #endif
+	      if(cachep->data_file)
+	      {
+	          unlink(cachep->data_file);
+	          free(cachep->data_file);
+	      }
+
 	      if(cachep->bstatus != NULL) {
 		      free(cachep->bstatus);
 	      }
