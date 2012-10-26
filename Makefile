@@ -49,11 +49,12 @@ SLIB = libdsmcc.so
 OBJS = dsmcc-receiver.o dsmcc-util.o dsmcc-debug.o dsmcc-descriptor.o dsmcc-biop.o dsmcc-carousel.o dsmcc-cache.o dsmcc.o
 SOFLAGS ?= -shared -Wl,-soname,$(SLIB) -o $(SLIB)
 
-all : $(SLIB)
+all : $(SLIB) dsmcc-reader
 
 clean :
 	@echo cleaning workspace...
 	@rm -f $(OBJS) $(SLIB) *~
+	@rm -f dsmcc-reader.o dsmcc-reader
 	@rm -f Makefile.dep
 
 depend : Makefile.dep
@@ -73,6 +74,10 @@ dist: all
 $(SLIB) : $(OBJS)
 	@echo "create shared library"
 	$(CC) $(SOFLAGS) $(LDFLAGS) -o $(SLIB) $(OBJS)
+
+dsmcc-reader : dsmcc-reader.o $(OBJS)
+	@echo "create dsmcc-reader executable"
+	$(CC) $(LDFLAGS) -o dsmcc-reader dsmcc-reader.o $(OBJS)
 
 .c.o : 
 	@echo compiling $<...
