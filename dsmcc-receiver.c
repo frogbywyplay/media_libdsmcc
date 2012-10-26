@@ -53,6 +53,7 @@ void dsmcc_init(struct dsmcc_status *status, const char *channel)
 	int i;
 
 	status->streams = NULL;
+	status->newstreams = NULL;
 	status->buffers = NULL;
 
 	for (i = 0; i < MAXCAROUSELS; i++)
@@ -77,11 +78,29 @@ void dsmcc_init(struct dsmcc_status *status, const char *channel)
 	}
 }
 
+static void dsmcc_free_streams(struct stream *stream)
+{
+	while (stream)
+	{
+		struct stream *strnext = stream->next;
+		free(stream);
+		stream = strnext;
+	}
+}
+
+static void dsmcc_free_buffers(struct pid_buffer *buffer)
+{
+	while (buffer)
+	{
+		struct pid_buffer *bufnext = buffer->next;
+		free(buffer);
+		buffer = bufnext;
+	}
+}
+
 void dsmcc_free(struct dsmcc_status *status)
 {
-	struct stream *str, *strnext;
 	struct file_info *file, *filenext;
-	struct pid_buffer *buf, *bufnext;
 	int i;
 
 	if (!status)
@@ -89,57 +108,36 @@ void dsmcc_free(struct dsmcc_status *status)
 
 	/* Free any carousel data and cached data.  */
 	for (i = 0; i < MAXCAROUSELS; i++)
-	{
-		if (status->carousels[i].filecache)
-		{
-			file = status->carousels[i].filecache->files;
-			while (file)
-			{
-				filenext = file->next;
-				free(file->filename);
-				free(file->path);
-				free(file);
-				file = filenext;
-			}
-			free(status->carousels[i].filecache);
-			status->carousels[i].filecache = NULL;
-		}
-	}
+		dsmcc_objcar_free(&status->carousels[i]);
 
 	/*
 	 * TODO - actually cache on disk the cache data
 	 * TODO - more terrible memory madness, this all needs improving
 	 */
 
-	/* Free any unattached streams */
-
 	if (status->streams)
 	{
-		/* Free stream info */
-		str = status->streams;
-		while (str)
-		{
-			strnext = str->next;
-			free(str);
-			str = strnext;
-		}
+		dsmcc_free_streams(status->streams);
 		status->streams = NULL;
+	}
+
+	if (status->newstreams)
+	{
+		dsmcc_free_streams(status->newstreams);
+		status->newstreams = NULL;
 	}
 
 	if(status->buffers)
 	{
-		buf = status->buffers;
-		while (buf)
-		{
-			bufnext = buf->next;
-			free(buf);
-			buf = bufnext;
-		}
+		dsmcc_free_buffers(status->buffers);
 		status->buffers = NULL;
 	}
 
 	if(status->channel_name)
+	{
 		free(status->channel_name);
+		status->channel_name = NULL;
+	}
 
 	free(status);
 }
@@ -182,7 +180,7 @@ void dsmcc_add_stream(struct dsmcc_status *status, int pid)
 	str = malloc(sizeof(struct stream));
 	str->pid = pid;
 	str->assoc_tag = pid;
-        str->next = str->prev = NULL;
+	str->next = str->prev = NULL;
 
 	if (!status->newstreams)
 	{
@@ -275,7 +273,6 @@ int dsmcc_process_section_gateway(struct dsmcc_status *status, unsigned char *da
 	struct stream *str, *s;
 
 	/* Find which object carousel this pid's data belongs to */
-
 	for (i = 0; i < MAXCAROUSELS; i++)
 	{
 		car = &status->carousels[i];
@@ -299,13 +296,14 @@ int dsmcc_process_section_gateway(struct dsmcc_status *status, unsigned char *da
 
 	DSMCC_DEBUG("[receiver] Setting gateway for pid %d\n", pid);
 
-	if (!car)
+	if (i == MAXCAROUSELS)
 	{ 
 		DSMCC_DEBUG("[receiver] Gateway for unknown carousel\n");
 		return 0;
 	}
 
 	car->gateway = (struct dsmcc_dsi *) malloc(sizeof(struct dsmcc_dsi));
+	memset(car->gateway, 0, sizeof(struct dsmcc_dsi));
 
 	/* 0-19 Server id = 20 * 0xFF */
 
@@ -334,6 +332,7 @@ int dsmcc_process_section_gateway(struct dsmcc_status *status, unsigned char *da
 	else
 	{
 		/* TODO handle error */
+		return -1;
 	}
 
 	/* Set carousel id if not already given in data_broadcast_id_descriptor
@@ -391,6 +390,17 @@ int dsmcc_process_section_gateway(struct dsmcc_status *status, unsigned char *da
 	return 0;
 }
 
+static void dsmcc_free_module(struct dsmcc_module_info *module)
+{
+	dsmcc_desc_free_all(module->modinfo.descriptors);
+
+	if (module->modinfo.tap.selector_data)
+	{
+		free(module->modinfo.tap.selector_data);
+		module->modinfo.tap.selector_data = NULL;
+	}
+}
+
 int dsmcc_process_section_info(struct dsmcc_status *status, struct dsmcc_section *section, unsigned char *data, int length)
 {
 	struct dsmcc_dii *dii = &section->msg.dii;
@@ -433,7 +443,7 @@ int dsmcc_process_section_info(struct dsmcc_status *status, struct dsmcc_section
 	DSMCC_DEBUG("[receiver] Info -> number modules = %d\n", dii->number_modules);
 
 	dii->modules = (struct dsmcc_module_info*) malloc(sizeof(struct dsmcc_module_info) * dii->number_modules);
-	for(i = 0; i < dii->number_modules; i++)
+	for (i = 0; i < dii->number_modules; i++)
 	{
 		dii->modules[i].module_id = dsmcc_getshort(data + off);
 		off += 2;
@@ -451,28 +461,24 @@ int dsmcc_process_section_info(struct dsmcc_status *status, struct dsmcc_section
 		}
 		else
 		{
-			/* TODO handle error */
+			/* handle error */
+			DSMCC_ERROR("[receiver] Info -> dsmcc_biop_process_module_info returned %d\n", ret);
+			return;
 		}
 	}
 
 	dii->private_data_len = dsmcc_getshort(data + off);
+	off += dii->private_data_len;
 	DSMCC_DEBUG("[receiver] Info -> Private Data Length = %d\n", dii->private_data_len);
-	/* UKProfile - ignored
-	dii->private_data = (char *)malloc(dii->private_data_len);
-	memcpy(dii->private_data, Data+off, dii->private_data_len);
-	*/
 
 	/* TODO add module info within this function */
 	dsmcc_add_module_info(status, section, car);
 
 	/* Free most of the memory up... all that effort for nothing */
 	for (i = 0; i < dii->number_modules; i++)
-	{
-		if (dii->modules[i].modinfo.tap.selector_len > 0)
-			free(dii->modules[i].modinfo.tap.selector_data);
-	}
-
-	free(dii->modules); /* TODO clean up properly... done? */
+		dsmcc_free_module(&dii->modules[i]);
+	free(dii->modules);
+	dii->modules = NULL;
 
 	return 0;
 }
@@ -496,12 +502,12 @@ void dsmcc_process_section_indication(struct dsmcc_status *status, unsigned char
 		return;
 	}
 
-	if(section.hdr.info.message_id == DSMCC_MESSAGE_DSI)
+	if (section.hdr.info.message_id == DSMCC_MESSAGE_DSI)
 	{
 		DSMCC_DEBUG("[receiver] Processing Server Gateway\n");
 		dsmcc_process_section_gateway(status, data + DSMCC_DSI_OFFSET, length, pid);
 	}
-	else if(section.hdr.info.message_id == DSMCC_MESSAGE_DII)
+	else if (section.hdr.info.message_id == DSMCC_MESSAGE_DII)
 	{
 		DSMCC_DEBUG("[receiver] Processing Module Info\n");
 		dsmcc_process_section_info(status, &section, data + DSMCC_DII_OFFSET, length);
@@ -623,7 +629,6 @@ void dsmcc_add_module_info(struct dsmcc_status *status, struct dsmcc_section *se
 			DSMCC_DEBUG("[receiver] Allocated %d bytes to store status for module %d\n", (num_blocks / 8) + 1, cachep->module_id);
 			asprintf(&cachep->data_file, "/tmp/dsmcc-cache/tmp/%lu-%hu-%hhu.data", cachep->carousel_id, cachep->module_id, cachep->version);
 			cachep->next = NULL;
-			cachep->blocks = NULL;
 			cachep->tag = dii->modules[i].modinfo.tap.assoc_tag;
 
 			/* Subscribe to pid if not already */
@@ -643,7 +648,6 @@ void dsmcc_add_module_info(struct dsmcc_status *status, struct dsmcc_section *se
 							s->next->prev = s->prev;
 					}
 					
-					/* TODO Far too complicated... shift to function */
 					DSMCC_DEBUG("[receiver] Subscribing to (data) pid %d\n", s->pid);
 					dsmcc_add_stream(status, s->pid);
 					free(s);
@@ -735,7 +739,7 @@ void dsmcc_add_module_data(struct dsmcc_status *status, struct dsmcc_section *se
 	unsigned long data_len = 0;
 	struct cache_module_data *cachep = NULL;
 	struct descriptor *desc = NULL;
-	struct dsmcc_ddb *lb, *pb, *nb, *ddb = &section->msg.ddb;
+	struct dsmcc_ddb *ddb = &section->msg.ddb;
 	struct obj_carousel *car;
 	int fd;
 	off_t seeked;
@@ -823,31 +827,7 @@ void dsmcc_add_module_data(struct dsmcc_status *status, struct dsmcc_section *se
 
 				close(fd);
 
-				if ((!cachep->blocks) || (cachep->blocks->block_number > ddb->block_number))
-				{
-					nb = cachep->blocks; /* NULL or previous first in list */
-					cachep->blocks = (struct dsmcc_ddb*) malloc(sizeof(struct dsmcc_ddb));
-					lb = cachep->blocks;
-				}
-				else
-				{
-					pb = lb = cachep->blocks;
-					while (lb && (lb->block_number < ddb->block_number))
-					{
-						pb = lb;
-						lb = lb->next;
-					}
-					nb = pb->next;
-					pb->next = (struct dsmcc_ddb*) malloc(sizeof(struct dsmcc_ddb));
-					lb=pb->next;
-				}
-
-				lb->module_id = ddb->module_id;
-				lb->module_version = ddb->module_version;
-				lb->block_number = ddb->block_number;
-				lb->len = ddb->len;
 				cachep->curp += ddb->len;
-				lb->next = nb;
 				BLOCK_SET(cachep->bstatus, ddb->block_number);
 			}
 		}
@@ -857,21 +837,6 @@ void dsmcc_add_module_data(struct dsmcc_status *status, struct dsmcc_section *se
 		if (cachep->curp >= cachep->size)
 		{
 			DSMCC_DEBUG("[receiver] Reconstructing module %d from blocks\n", cachep->module_id);
-			/* Re-assemble the blocks into the complete module */
-			//cachep->data = (unsigned char*) malloc(cachep->size);
-			cachep->curp = 0;
-			pb = lb = cachep->blocks;
-			while (lb)
-			{
-				//memcpy(cachep->data+cachep->curp,lb->blockdata,lb->len);
-				//cachep->curp += lb->len;
-				pb = lb;
-				lb = lb->next;
-				//if (pb->blockdata != NULL)
-				//	free(pb->blockdata);
-				free(pb);
-			}
-			cachep->blocks = NULL;
 
 			/* Uncompress.... TODO - scan for compressed descriptor */
 			for (desc = cachep->descriptors; desc != NULL; desc = desc->next)

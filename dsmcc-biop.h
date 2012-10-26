@@ -132,9 +132,6 @@ struct dsmcc_module_info {
         unsigned char module_version;
         unsigned char module_info_len;
         struct biop_module_info modinfo;
-        unsigned char *data;
-        unsigned int curp;
-        struct dsmcc_module_info *next;
 };
 
 struct dsmcc_dsi {

@@ -69,6 +69,7 @@ void dsmcc_cache_free(struct cache *filecache)
 {
 	struct cache_file *f, *fn;
 	struct cache_dir *d, *dn;
+	struct file_info *file, *filenext;
 
 	/* Free unconnected files */
 	f = filecache->file_cache;
@@ -86,6 +87,7 @@ void dsmcc_cache_free(struct cache *filecache)
 		free(f);
 		f = fn;
 	}
+	filecache->file_cache = NULL;
 
 	/* Free cached data */
 	f = filecache->data_cache;
@@ -98,6 +100,7 @@ void dsmcc_cache_free(struct cache *filecache)
 		free(f);
 		f = fn;
 	}
+	filecache->data_cache = NULL;
 
 	/* Free unconnected dirs */
 	d = filecache->dir_cache;
@@ -130,18 +133,34 @@ void dsmcc_cache_free(struct cache *filecache)
 		free(d);
 		d = dn;
 	}
-
-	/* Free cache - TODO improve this */
-	if(filecache->gateway)
-		dsmcc_cache_free_dir(filecache->gateway);
-
-	filecache->file_cache = NULL;
-	filecache->data_cache = NULL;
-	filecache->gateway = NULL;
 	filecache->dir_cache = NULL;
 
+	/* Free cache - TODO improve this */
+	if (filecache->gateway)
+	{
+		dsmcc_cache_free_dir(filecache->gateway);
+		filecache->gateway = NULL;
+	}
+
+	/* Free files */
+	file = filecache->files;
+	while (file)
+	{
+		filenext = file->next;
+		free(file->filename);
+		free(file->path);
+		free(file);
+		file = filenext;
+	}
+	filecache->files = NULL;
+
 	if (filecache->name)
+	{
 		free(filecache->name);
+		filecache->name = NULL;
+	}
+
+	free(filecache);
 }
 
 void dsmcc_cache_free_dir(struct cache_dir *d)

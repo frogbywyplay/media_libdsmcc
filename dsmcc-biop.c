@@ -249,6 +249,7 @@ int dsmcc_biop_process_srg(struct biop_message *bm, struct cache_module_data *ca
 		else
 		{
 			DSMCC_ERROR("[biop] dsmcc_biop_process_binding returned %d\n", ret);
+			dsmcc_biop_free_binding(&bm->body.srg.binding);
 			return -1;
 		}
 		
@@ -257,9 +258,8 @@ int dsmcc_biop_process_srg(struct biop_message *bm, struct cache_module_data *ca
 		else if(!strcmp("fil", bm->body.srg.binding.name.comps[0].kind))
 			dsmcc_cache_file_info(filecache, 0, 0, NULL, &bm->body.srg.binding);
 		else
-		{
 			DSMCC_ERROR("[biop] Skipping unknown kind \"%s\"\n", bm->body.srg.binding.name.comps[0].kind);
-		}
+
 		dsmcc_biop_free_binding(&bm->body.srg.binding);
 	}
 
@@ -395,9 +395,11 @@ void dsmcc_biop_process_data(struct cache *filecache, struct cache_module_data *
 {
 	struct biop_message bm;
 	struct descriptor *desc;
-	int ret;
+	int ret, failed;
 	unsigned int len;
 	static int i = 0;
+
+	memset(&bm, 0, sizeof(struct biop_message));
 
 	for (desc = cachep->descriptors; desc; desc=desc->next)
 	{
@@ -421,7 +423,8 @@ void dsmcc_biop_process_data(struct cache *filecache, struct cache_module_data *
 	}
 
 	/* Replace off with cachep->curp.... */
-	while (cachep->curp < len)
+	failed = 0;
+	while (cachep->curp < len && !failed)
 	{
 		DSMCC_DEBUG("[biop] Current %ld / Full %d\n", cachep->curp, len);
 
@@ -454,18 +457,18 @@ void dsmcc_biop_process_data(struct cache *filecache, struct cache_module_data *
 		else if(strcmp(bm.hdr.objkind, "str") == 0)
 		{
 			DSMCC_ERROR("[biop] Don't known of to handle stream objects, dropping rest of module\n");
-			break;
+			failed = 1;
 		}
 		else if(strcmp(bm.hdr.objkind, "ste") == 0)
 		{
 			DSMCC_ERROR("[biop] Don't known of to handle stream event objects, dropping rest of module\n");
-			break;
+			failed = 1;
 		}
 		else
 		{
 			/* Error */
 			DSMCC_ERROR("[biop] Don't known of to handle unknown object (kind \"%s\"), dropping rest of module\n", bm.hdr.objkind);
-			break;
+			failed = 1;
 		}
 
 		free(bm.hdr.objkey);
@@ -518,7 +521,7 @@ int dsmcc_biop_process_module_info(struct biop_module_info *modinfo, unsigned ch
 		int read = 0;
 		modinfo->descriptors = dsmcc_desc_process(data + off, modinfo->userinfo_len, &read);
 		if (read != modinfo->userinfo_len)
-			DSMCC_DEBUG("[biop] Descriptor processing has not used the correct amount of data (%d instead of %d)\n", read, modinfo->userinfo_len);
+			DSMCC_WARN("[biop] Descriptor processing has not used the correct amount of data (%d instead of %d)\n", read, modinfo->userinfo_len);
 
 		off += modinfo->userinfo_len;
 	}
@@ -684,7 +687,7 @@ int dsmcc_biop_process_ior(struct biop_ior *ior, unsigned char *data)
 	off += 4;
 	if (ior->type_id_len > 0)
 	{
-		ior->type_id = (char *)malloc(ior->type_id_len);
+		ior->type_id = (char *) malloc(ior->type_id_len);
 		memcpy(ior->type_id, data + off, ior->type_id_len);
 	}
 	else

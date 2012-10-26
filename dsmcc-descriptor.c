@@ -186,11 +186,14 @@ struct descriptor *dsmcc_desc_process(unsigned char *data, int data_len, int *by
 	{
 		desc = dsmcc_desc_process_one(data + offset, &read);
 		offset += read;
-		if (list_tail == NULL) {
+		if (list_tail == NULL)
+		{
 			list_head = desc;
 			list_head->next = NULL;
 			list_tail = list_head;
-		} else {
+		}
+		else
+		{
 			list_tail->next = desc;
 			list_tail = desc;
 			list_tail->next = NULL;

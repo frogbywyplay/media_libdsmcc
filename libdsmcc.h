@@ -12,7 +12,7 @@ extern "C" {
 struct stream {
         int pid;
         unsigned int assoc_tag;
-        struct stream *next, *prev;;
+        struct stream *next, *prev;
 };
 
 #define DSMCC_PID_BUF_SIZE (1024 * 8 + 188)

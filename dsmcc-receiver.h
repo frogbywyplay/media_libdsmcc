@@ -24,7 +24,6 @@ struct cache_module_data {
 
 	unsigned short block_num;
 	char *bstatus;	/* Block status bit field */
-	struct dsmcc_ddb *blocks;
 	char *data_file;
 	unsigned char *data_ptr;
 	char cached;

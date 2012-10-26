@@ -82,10 +82,13 @@ int main(int argc, char **argv)
         dsmcc_handle = dsmcc_open(channel_name);
 
         dsmcc_add_stream(dsmcc_handle, pid);
+	dsmcc_handle->carousels[0].streams = malloc(sizeof(struct stream));
+	dsmcc_handle->carousels[0].streams->pid = pid;
+	dsmcc_handle->carousels[0].streams->assoc_tag = pid;
+	dsmcc_handle->carousels[0].streams->next = NULL;
+	dsmcc_handle->carousels[0].streams->prev = NULL;
 
         status = process_stream(ts, dsmcc_handle);
-        for(i = 0; i < MAXCAROUSELS; i++)
-            dsmcc_objcar_free(&dsmcc_handle->carousels[i]);
 
         dsmcc_free(dsmcc_handle);
     }
