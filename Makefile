@@ -32,9 +32,10 @@
 
 CC = gcc
 CFLAGS ?= -g -Wmissing-prototypes -Wstrict-prototypes \
-         -DNAPI -Wimplicit -D__USE_FIXED_PROTOTYPES__ -fPIC # -ansi -pedantic 
+         -DNAPI -Wimplicit -D__USE_FIXED_PROTOTYPES__ -fPIC \
+         -DDSMCC_DEBUG_ENABLED
 
-INCDIRS = -I../../../../../DVB 
+INCDIRS =
 DISTDIR = ../lib
 MAKEDEPEND = gcc -M
 
@@ -45,7 +46,7 @@ ARFLAGS = ru
 RANLIB = ranlib
 
 SLIB = libdsmcc.so
-OBJS = dsmcc-receiver.o dsmcc-util.o dsmcc-descriptor.o dsmcc-biop.o dsmcc-carousel.o dsmcc-cache.o dsmcc.o
+OBJS = dsmcc-receiver.o dsmcc-util.o dsmcc-debug.o dsmcc-descriptor.o dsmcc-biop.o dsmcc-carousel.o dsmcc-cache.o dsmcc.o
 SOFLAGS ?= -shared -Wl,-soname,$(SLIB) -o $(SLIB)
 
 all : $(SLIB)

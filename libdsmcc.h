@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#include <syslog.h>
+#include "dsmcc-debug.h"
 #include "dsmcc-receiver.h"
 #include "dsmcc-carousel.h"
 
@@ -15,9 +15,11 @@ struct stream {
         struct stream *next, *prev;;
 };
 
+#define DSMCC_PID_BUF_SIZE (1024 * 8 + 188)
+
 struct pid_buffer {
         int pid;
-        unsigned char data[4284]; /* 1024*4 + 188 */
+        unsigned char data[DSMCC_PID_BUF_SIZE];
         int pointer_field;
         int in_section;
         int cont;
@@ -30,7 +32,7 @@ struct dsmcc_status {
 	int gzip_size, total_size;
 	enum cachestate { EMPTY, LISTINGS, FILLING, FULL } state;
 
-	char *name;
+	char *channel_name;
 
 	/* must check to see if any new streams to subscribe to after calling
 	   receive each time (new stream info comes from within dsmcc */
@@ -47,12 +49,10 @@ struct dsmcc_status {
 	struct obj_carousel carousels[MAXCAROUSELS];
 
 	struct pid_buffer *buffers;
-
-	FILE *debug_fd;
 };
 
-struct dsmcc_status *dsmcc_open(const char *channel, FILE *);
-void dsmcc_receive(struct dsmcc_status *status, unsigned char *Data, int Length);
+struct dsmcc_status *dsmcc_open(const char *channel);
+void dsmcc_receive(struct dsmcc_status *status, unsigned char *data, int length);
 void dsmcc_close(struct dsmcc_status *status);
 void dsmcc_free(struct dsmcc_status *status);
 
