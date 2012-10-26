@@ -20,7 +20,6 @@ struct stream {
 struct pid_buffer {
         int pid;
         unsigned char data[DSMCC_PID_BUF_SIZE];
-        int pointer_field;
         int in_section;
         int cont;
         struct pid_buffer *next;

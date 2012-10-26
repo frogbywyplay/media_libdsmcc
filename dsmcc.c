@@ -103,11 +103,11 @@ void dsmcc_receive(struct dsmcc_status *status, unsigned char *data, int length)
 		DSMCC_DEBUG("[dsmcc] New dsmcc section\n");
 		if(buf->in_section)
 		{
-			buf->pointer_field = data[4];
-			if (buf->pointer_field >= 0 && buf->pointer_field < 183)
+			int pointer_field = data[4];
+			if (pointer_field >= 0 && pointer_field < 183)
 			{
-				if (buf->pointer_field > 0)
-					memcpy(buf->data + buf->in_section, data + 5, buf->pointer_field);
+				if (pointer_field > 0)
+					memcpy(buf->data + buf->in_section, data + 5, pointer_field);
 
 				dsmcc_process_section(status, buf->data, buf->in_section, pid);
 				
@@ -115,14 +115,14 @@ void dsmcc_receive(struct dsmcc_status *status, unsigned char *data, int length)
 				memset(buf->data, 0xFF, DSMCC_PID_BUF_SIZE);
 				
 				/* read data upto this and append to buf */
-				buf->in_section = 183 - buf->pointer_field;
+				buf->in_section = 183 - pointer_field;
 				buf->cont = -1;
-				memcpy(buf->data, data + 5 + buf->pointer_field, buf->in_section);
+				memcpy(buf->data, data + 5 + pointer_field, buf->in_section);
 			}
 			else
 			{
 				/* TODO corrupted ? */
-				DSMCC_ERROR("Invalid pointer field %d\n", buf->pointer_field);
+				DSMCC_ERROR("Invalid pointer field %d\n", pointer_field);
 			}
 		}
 		else

@@ -33,8 +33,6 @@
 #define DSMCC_DDB_OFFSET	20
 #define DSMCC_BIOP_OFFSET	24
 
-static void dsmcc_add_stream(struct dsmcc_status *, struct stream *);
-
 static void dsmcc_add_module_info(struct dsmcc_status *, struct dsmcc_section *, struct obj_carousel *);
 static void dsmcc_add_module_data(struct dsmcc_status *, struct dsmcc_section *, unsigned char *);
 
@@ -146,7 +144,7 @@ void dsmcc_free(struct dsmcc_status *status)
 	free(status);
 }
 
-void dsmcc_add_stream(struct dsmcc_status *status, struct stream *newstr)
+void dsmcc_add_stream(struct dsmcc_status *status, int pid)
 {
 	struct pid_buffer *buf, *lbuf;
 	struct stream *str, *strs;
@@ -155,18 +153,17 @@ void dsmcc_add_stream(struct dsmcc_status *status, struct stream *newstr)
 
 	for (lbuf = status->buffers; lbuf != NULL; lbuf = lbuf->next)
 	{
-		if (lbuf->pid == newstr->pid)
+		if (lbuf->pid == pid)
 			return;
 	}
 
-	DSMCC_DEBUG("[receiver] Created buffer for pid %d\n", newstr->pid);
-
 	buf = (struct pid_buffer *) malloc(sizeof(struct pid_buffer));
-	buf->pid = newstr->pid;
-	buf->pointer_field = 0;
+	buf->pid = pid;
 	buf->in_section = 0;
 	buf->cont = -1;
 	buf->next = NULL;
+
+	DSMCC_DEBUG("[receiver] Created buffer for pid %d\n", pid);
 
 	if (!status->buffers)
 	{
@@ -183,8 +180,8 @@ void dsmcc_add_stream(struct dsmcc_status *status, struct stream *newstr)
 	/* Add new stream to newstreams for caller code to pick up */
 
 	str = malloc(sizeof(struct stream));
-	str->pid = newstr->pid;
-	str->assoc_tag = newstr->pid;
+	str->pid = pid;
+	str->assoc_tag = pid;
         str->next = str->prev = NULL;
 
 	if (!status->newstreams)
@@ -370,7 +367,7 @@ int dsmcc_process_section_gateway(struct dsmcc_status *status, unsigned char *da
 
 			DSMCC_DEBUG("[receiver] Subscribing to (info) stream %d\n", s->pid);
 			/* TODO Far too complicated...*/
-			dsmcc_add_stream(status, s);
+			dsmcc_add_stream(status, s->pid);
 			free(s);
 		}
 	}
@@ -648,7 +645,7 @@ void dsmcc_add_module_info(struct dsmcc_status *status, struct dsmcc_section *se
 					
 					/* TODO Far too complicated... shift to function */
 					DSMCC_DEBUG("[receiver] Subscribing to (data) pid %d\n", s->pid);
-					dsmcc_add_stream(status, s);
+					dsmcc_add_stream(status, s->pid);
 					free(s);
 				}
 			}

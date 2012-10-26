@@ -58,7 +58,6 @@ int main(int argc, char **argv)
     int status = 0; 
     char *channel_name;
     FILE *ts;
-    struct pid_buffer *buf;
     static uint16_t pid;
     int i;
 
@@ -82,13 +81,7 @@ int main(int argc, char **argv)
     {
         dsmcc_handle = dsmcc_open(channel_name);
 
-	buf = malloc(sizeof(struct pid_buffer));
-	buf->pid = pid;
-	buf->pointer_field = 0;
-	buf->in_section = 0;
-	buf->cont = -1;
-	buf->next = NULL;
-	dsmcc_handle->buffers = buf;
+        dsmcc_add_stream(dsmcc_handle, pid);
 
         status = process_stream(ts, dsmcc_handle);
         for(i = 0; i < MAXCAROUSELS; i++)

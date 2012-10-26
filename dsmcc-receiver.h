@@ -105,6 +105,7 @@ struct dsmcc_section {
 };
 
 void dsmcc_init(struct dsmcc_status *, const char *channel);
+void dsmcc_add_stream(struct dsmcc_status *, int pid);
 void dsmcc_process_section(struct dsmcc_status *, unsigned char *data, int pid, int Length);
 void dsmcc_free(struct dsmcc_status *);
 void dsmcc_free_cache_module_data(struct obj_carousel *car, struct cache_module_data *cachep);
