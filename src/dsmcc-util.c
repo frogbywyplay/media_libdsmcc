@@ -1,5 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
+#include <sys/stat.h>
 #include "dsmcc-util.h"
 
 // CRC code taken from libdtv (Rolf Hakenes)
@@ -68,4 +71,29 @@ unsigned long dsmcc_getlong(unsigned char *data)
 unsigned short dsmcc_getshort(unsigned char *data)
 {
 	return (data[0] << 8) | data[1];
+}
+
+void dsmcc_mkdir(const char *name, mode_t mode)
+{
+	char *pos, *namecopy;
+
+	namecopy = strdup(name);
+	pos = namecopy;
+	do
+	{
+		pos = strchr(pos, '/');
+		if (pos != namecopy)
+		{
+			if (pos != NULL)
+				*pos = '\0';
+
+			mkdir(namecopy, mode);
+
+			if (pos != NULL)
+				*pos = '/';
+		}
+		if (pos != NULL)
+			pos++;
+	} while (pos);
+	free(namecopy);
 }

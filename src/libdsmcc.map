@@ -1,0 +1,15 @@
+DSMCCSYMS {
+	global:
+		dsmcc_set_logger;
+		dsmcc_open;
+		dsmcc_close;
+		dsmcc_add_carousel;
+		dsmcc_parse_section;
+		dsmcc_add_pid_buffer;
+		dsmcc_free_pid_buffers;
+		dsmcc_parse_ts_packet;
+		dsmcc_parse_buffered_sections;
+	local:
+		*;
+ };
+

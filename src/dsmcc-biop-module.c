@@ -1,0 +1,73 @@
+#include <stdlib.h>
+#include <string.h>
+
+#include "dsmcc-biop-module.h"
+#include "dsmcc-biop-ior.h"
+#include "dsmcc-biop-tap.h"
+#include "dsmcc-descriptor.h"
+#include "dsmcc-debug.h"
+#include "dsmcc-util.h"
+
+int dsmcc_biop_parse_module_info(struct biop_module_info *module_info, unsigned char *data, int data_length)
+{
+	int off = 0, ret;
+	unsigned char userinfo_len;
+	struct biop_tap *tap;
+
+	memset(module_info, 0, sizeof(struct biop_module_info));
+
+	module_info->mod_timeout = dsmcc_getlong(data);
+	off += 4;
+	DSMCC_DEBUG("Mod Timeout = %lu", module_info->mod_timeout);
+
+	module_info->block_timeout = dsmcc_getlong(data + off);
+	off += 4;
+	DSMCC_DEBUG("Block Timeout = %lu", module_info->block_timeout);
+
+	module_info->min_blocktime = dsmcc_getlong(data + off);
+	off += 4;
+	DSMCC_DEBUG("Min Block Timeout = %lu", module_info->min_blocktime);
+
+	ret = dsmcc_biop_parse_taps_keep_only_first(&tap, BIOP_OBJECT_USE, data + off, data_length - off);
+	if (ret < 0)
+	{
+		DSMCC_ERROR("dsmcc_biop_parse_taps_keep_only_first returned %d", ret);
+		dsmcc_biop_free_module_info(module_info);
+		return -1;
+	}
+	off += ret;
+	module_info->assoc_tag = tap->assoc_tag;
+	dsmcc_biop_free_tap(tap);
+
+	userinfo_len = data[off++];
+	DSMCC_DEBUG("UserInfo Len = %d", userinfo_len);
+
+	if (userinfo_len > 0)
+	{
+		ret = dsmcc_parse_descriptors(&module_info->descriptors, data + off, userinfo_len);
+		if (ret < 0)
+		{
+			DSMCC_ERROR("dsmcc_parse_descriptors returned %d", ret);
+			dsmcc_biop_free_module_info(module_info);
+			return -1;
+		}
+		off += userinfo_len;
+	}
+	else
+	{
+		module_info->descriptors = NULL;
+	}
+
+	return off;
+}
+
+void dsmcc_biop_free_module_info(struct biop_module_info *module_info)
+{
+	if (module_info == NULL)
+		return;
+
+	dsmcc_descriptors_free_all(module_info->descriptors);
+	module_info->descriptors = NULL;
+
+	free(module_info);
+}
