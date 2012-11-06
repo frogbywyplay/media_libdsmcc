@@ -1,7 +1,7 @@
 #ifndef DSMCC_DEBUG_H
 #define DSMCC_DEBUG_H
 
-#include "libdsmcc.h"
+#include <dsmcc/dsmcc.h>
 
 #define DSMCC_DEBUG(format, args...) do { if (dsmcc_log_enabled(DSMCC_LOG_DEBUG)) dsmcc_log(DSMCC_LOG_DEBUG, __FILE__, __FUNCTION__, __LINE__, format, ##args); } while (0)
 #define DSMCC_WARN(format, args...) do { if (dsmcc_log_enabled(DSMCC_LOG_WARN)) dsmcc_log(DSMCC_LOG_WARN, __FILE__, __FUNCTION__, __LINE__, format, ##args); } while (0)

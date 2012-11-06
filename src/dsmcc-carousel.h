@@ -23,7 +23,7 @@ struct dsmcc_object_carousel
 	struct dsmcc_cached_module *modules;
 	struct dsmcc_file_cache    *filecache;
 
-	struct dsmcc_status          *status;
+	struct dsmcc_state           *state;
 	struct dsmcc_object_carousel *next;
 };
 

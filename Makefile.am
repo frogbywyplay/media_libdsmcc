@@ -1,5 +1,11 @@
-SUBDIRS = src
+SUBDIRS = src tools
+
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = dsmcc.pc
 
-SUBDIRS += tools
+# Documentation 
+
+.PHONY: doc
+
+doc: $(top_srcdir)/include/dsmcc/dsmcc.h
+	doxygen Doxyfile

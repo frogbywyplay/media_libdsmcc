@@ -23,7 +23,7 @@ noinst_HEADERS = \
 	$(top_srcdir)/src/dsmcc-util.h
 
 libdsmcc_so_HEADERS = \
-	$(top_srcdir)/include/dsmcc/libdsmcc.h
+	$(top_srcdir)/include/dsmcc/dsmcc.h
 
 libdsmcc_so_SOURCES = \
 	$(top_srcdir)/src/dsmcc-biop-ior.c \

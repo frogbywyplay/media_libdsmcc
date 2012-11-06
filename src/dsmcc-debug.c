@@ -2,7 +2,6 @@
 #include <stdarg.h>
 #include <string.h>
 
-#include "libdsmcc.h"
 #include "dsmcc-debug.h"
 
 static dsmcc_logger_t *g_logger = NULL;

@@ -137,7 +137,7 @@ static int dsmcc_parse_message_header(struct dsmcc_message_header *header, unsig
 /*
  * ETSI TR 101 202 Table 4.15
  */
-static int dsmcc_parse_biop_service_gateway_info(struct dsmcc_status *status, struct dsmcc_object_carousel *car, unsigned char *data, int data_length)
+static int dsmcc_parse_biop_service_gateway_info(struct dsmcc_state *state, struct dsmcc_object_carousel *car, unsigned char *data, int data_length)
 {
 	int off = 0, ret;
 	unsigned char tmp;
@@ -207,7 +207,7 @@ static int dsmcc_parse_biop_service_gateway_info(struct dsmcc_status *status, st
 /*
  * ETSI TR 101 202 Table A.3
  */
-static int dsmcc_parse_section_dsi(struct dsmcc_status *status, unsigned char *data, int data_length, int pid)
+static int dsmcc_parse_section_dsi(struct dsmcc_state *state, unsigned char *data, int data_length, int pid)
 {
         int off = 0, ret;
 	unsigned short i, dsi_data_length;
@@ -217,7 +217,7 @@ static int dsmcc_parse_section_dsi(struct dsmcc_status *status, unsigned char *d
 	DSMCC_DEBUG("Setting gateway for pid %d", pid);
 
 	/* Find which object carousel this pid's data belongs to */
-	for (car = status->carousels; car; car = car->next)
+	for (car = state->carousels; car; car = car->next)
 	{
 		str = dsmcc_find_stream_by_pid(car->streams, pid);
 		if (str)
@@ -261,7 +261,7 @@ static int dsmcc_parse_section_dsi(struct dsmcc_status *status, unsigned char *d
 	DSMCC_DEBUG("Data Length: %d", dsi_data_length);
 
 	DSMCC_DEBUG("Processing BIOP::ServiceGatewayInfo...");
-	ret = dsmcc_parse_biop_service_gateway_info(status, car, data + off, data_length - off);
+	ret = dsmcc_parse_biop_service_gateway_info(state, car, data + off, data_length - off);
 	if (ret < 0)
 	{
 		DSMCC_ERROR("DSI -> dsmcc_parse_biop_service_gateway_info returned %d", ret);
@@ -277,7 +277,7 @@ static int dsmcc_parse_section_dsi(struct dsmcc_status *status, unsigned char *d
 /*
  * ETSI TR 101 202 Table A.4
  */
-static int dsmcc_parse_section_dii(struct dsmcc_status *status, unsigned char *data, int data_length)
+static int dsmcc_parse_section_dii(struct dsmcc_state *state, unsigned char *data, int data_length)
 {
 	struct dsmcc_object_carousel *car;
 	int off = 0, ret;
@@ -288,7 +288,7 @@ static int dsmcc_parse_section_dii(struct dsmcc_status *status, unsigned char *d
 	off += 4;
 	DSMCC_DEBUG("Info -> Download ID = %lX", dii.download_id);
 
-	car = dsmcc_find_carousel_by_id(status->carousels, dii.download_id);
+	car = dsmcc_find_carousel_by_id(state->carousels, dii.download_id);
 	if (!car)
 	{
 		DSMCC_ERROR("Section Info for unknown carousel %ld", dii.download_id);
@@ -342,7 +342,7 @@ static int dsmcc_parse_section_dii(struct dsmcc_status *status, unsigned char *d
 		}
 		off += module_info_length;
 
-		dsmcc_add_cached_module_info(status, car, &dii, &dmi, bmi);
+		dsmcc_add_cached_module_info(state, car, &dii, &dmi, bmi);
 		dsmcc_biop_free_module_info(bmi);
 	}
 
@@ -354,7 +354,7 @@ static int dsmcc_parse_section_dii(struct dsmcc_status *status, unsigned char *d
 	return off;
 }
 
-static int dsmcc_parse_section_control(struct dsmcc_status *status, unsigned char *data, int data_length, int pid)
+static int dsmcc_parse_section_control(struct dsmcc_state *state, unsigned char *data, int data_length, int pid)
 {
 	struct dsmcc_message_header header;
 	int off = 0, ret;
@@ -372,7 +372,7 @@ static int dsmcc_parse_section_control(struct dsmcc_status *status, unsigned cha
 	{
 		case 0x1006:
 			DSMCC_DEBUG("Processing Download-ServerInitiate message");
-			ret = dsmcc_parse_section_dsi(status, data, data_length, pid);
+			ret = dsmcc_parse_section_dsi(state, data, data_length, pid);
 			if (ret < 0)
 			{
 				DSMCC_ERROR("dsmcc_parse_section_dsi returned %d", ret);
@@ -381,7 +381,7 @@ static int dsmcc_parse_section_control(struct dsmcc_status *status, unsigned cha
 			break;
 		case 0x1002:
 			DSMCC_DEBUG("Processing Download-InfoIndication message");
-			ret = dsmcc_parse_section_dii(status, data, data_length);
+			ret = dsmcc_parse_section_dii(state, data, data_length);
 			if (ret < 0)
 			{
 				DSMCC_ERROR("dsmcc_parse_section_dii returned %d", ret);
@@ -455,7 +455,7 @@ static int dsmcc_parse_data_header(struct dsmcc_data_header *header, unsigned ch
 /*
  * ETSI TR 101 202 Table A.5
  */
-static int dsmcc_parse_section_ddb(struct dsmcc_status *status, struct dsmcc_data_header *header, unsigned char *data, int data_length)
+static int dsmcc_parse_section_ddb(struct dsmcc_state *state, struct dsmcc_data_header *header, unsigned char *data, int data_length)
 {
 	int off = 0;
 	struct dsmcc_ddb ddb;
@@ -478,13 +478,13 @@ static int dsmcc_parse_section_ddb(struct dsmcc_status *status, struct dsmcc_dat
 	ddb.length = header->message_length - off;
 	DSMCC_DEBUG("Block Length %ld", ddb.length);
 
-	dsmcc_save_cached_module_data(status, header->download_id, &ddb, data + off, data_length - off);
+	dsmcc_save_cached_module_data(state, header->download_id, &ddb, data + off, data_length - off);
 	off += ddb.length;
 
 	return off;
 }
 
-static int dsmcc_parse_section_data(struct dsmcc_status *status, unsigned char *data, int data_length)
+static int dsmcc_parse_section_data(struct dsmcc_state *state, unsigned char *data, int data_length)
 {
 	struct dsmcc_data_header header;
 	int off = 0, ret;
@@ -494,7 +494,7 @@ static int dsmcc_parse_section_data(struct dsmcc_status *status, unsigned char *
 		return -1;
 	off += ret;
 
-	ret = dsmcc_parse_section_ddb(status, &header, data + off, data_length - off);
+	ret = dsmcc_parse_section_ddb(state, &header, data + off, data_length - off);
 	if (ret < 0)
 		return -1;
 	off += header.message_length;
@@ -502,7 +502,7 @@ static int dsmcc_parse_section_data(struct dsmcc_status *status, unsigned char *
 	return off;
 }
 
-int dsmcc_parse_section(struct dsmcc_status *status, int pid, unsigned char *data, int data_length)
+int dsmcc_parse_section(struct dsmcc_state *state, int pid, unsigned char *data, int data_length)
 {
 	int off = 0, ret;
 	struct dsmcc_section_header header;
@@ -518,7 +518,7 @@ int dsmcc_parse_section(struct dsmcc_status *status, int pid, unsigned char *dat
 	{
 		case 0x3B:
 			DSMCC_DEBUG("DSI/DII Section");
-			ret = dsmcc_parse_section_control(status, data + off, data_length - off, pid);
+			ret = dsmcc_parse_section_control(state, data + off, data_length - off, pid);
 			if (ret < 0)
 			{
 				DSMCC_ERROR("dsmcc_parse_section_control returned %d", ret);
@@ -527,7 +527,7 @@ int dsmcc_parse_section(struct dsmcc_status *status, int pid, unsigned char *dat
 			break;
 		case 0x3C:
 			DSMCC_DEBUG("DDB Section");
-			ret = dsmcc_parse_section_data(status, data + off, data_length - off);
+			ret = dsmcc_parse_section_data(state, data + off, data_length - off);
 			if (ret < 0)
 			{
 				DSMCC_ERROR("dsmcc_parse_section_data returned %d", ret);

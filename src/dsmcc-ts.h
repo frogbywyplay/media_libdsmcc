@@ -1,18 +1,16 @@
 #ifndef DSMCC_TS_H
 #define DSMCC_TS_H
 
-#include "libdsmcc.h"
+#define DSMCC_TSPARSER_BUFFER_SIZE (1024 * 8 + 188)
 
-#define DSMCC_PID_BUFFER_SIZE (1024 * 8 + 188)
-
-struct dsmcc_pid_buffer
+struct dsmcc_tsparser_buffer
 {
         int           pid;
         int           in_section;
         int           cont;
-        unsigned char data[DSMCC_PID_BUFFER_SIZE];
+        unsigned char data[DSMCC_TSPARSER_BUFFER_SIZE];
 
-        struct dsmcc_pid_buffer *next;
+        struct dsmcc_tsparser_buffer *next;
 };
 
 #endif

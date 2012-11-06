@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "libdsmcc.h"
+#include "dsmcc.h"
 #include "dsmcc-debug.h"
 #include "dsmcc-util.h"
 #include "dsmcc-ts.h"
@@ -11,44 +11,44 @@
 #define DSMCC_TRANSPORT_ERROR	0x80
 #define DSMCC_START_INDICATOR	0x40
 
-void dsmcc_add_pid_buffer(struct dsmcc_pid_buffer **pid_buffers, int pid)
+void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, int pid)
 {
-	struct dsmcc_pid_buffer *buf;
+	struct dsmcc_tsparser_buffer *buf;
 
 	/* check that we do not already track this PID */
-	for (buf = *pid_buffers; buf != NULL; buf = buf->next)
+	for (buf = *buffers; buf != NULL; buf = buf->next)
 	{
 		if (buf->pid == pid)
 			return;
 	}
 
 	/* create and register PID buffer */
-	buf = malloc(sizeof(struct dsmcc_pid_buffer));
+	buf = malloc(sizeof(struct dsmcc_tsparser_buffer));
 	buf->pid = pid;
 	buf->in_section = 0;
 	buf->cont = -1;
-	buf->next = *pid_buffers;
-	*pid_buffers = buf;
+	buf->next = *buffers;
+	*buffers = buf;
 	DSMCC_DEBUG("Created buffer for PID 0x%x", pid);
 }
 
-void dsmcc_free_pid_buffers(struct dsmcc_pid_buffer **pid_buffers)
+void dsmcc_tsparser_free_buffers(struct dsmcc_tsparser_buffer **buffers)
 {
-	struct dsmcc_pid_buffer *buffer = *pid_buffers;
+	struct dsmcc_tsparser_buffer *buffer = *buffers;
 
 	while (buffer)
 	{
-		struct dsmcc_pid_buffer *bufnext = buffer->next;
+		struct dsmcc_tsparser_buffer *bufnext = buffer->next;
 		free(buffer);
 		buffer = bufnext;
 	}
 
-	*pid_buffers = NULL;
+	*buffers = NULL;
 }
 
-void dsmcc_parse_ts_packet(struct dsmcc_status *status, struct dsmcc_pid_buffer **buffers, unsigned char *packet, int packet_length)
+void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparser_buffer **buffers, unsigned char *packet, int packet_length)
 {
-	struct dsmcc_pid_buffer *buf;
+	struct dsmcc_tsparser_buffer *buf;
 	unsigned int pid;
 	unsigned int cont;
 
@@ -111,7 +111,7 @@ void dsmcc_parse_ts_packet(struct dsmcc_status *status, struct dsmcc_pid_buffer 
 		/* Out of sequence packet, drop current section */
 		DSMCC_WARN("Packet out of sequence (cont=%d, buf->cont=%d), resetting", cont, buf->cont);
 		buf->in_section = 0;
-		memset(buf->data, 0xFF, DSMCC_PID_BUFFER_SIZE);
+		memset(buf->data, 0xFF, DSMCC_TSPARSER_BUFFER_SIZE);
 	}
 
 	if (packet[1] & DSMCC_START_INDICATOR)
@@ -125,10 +125,10 @@ void dsmcc_parse_ts_packet(struct dsmcc_status *status, struct dsmcc_pid_buffer 
 				if (pointer_field > 0)
 					memcpy(buf->data + buf->in_section, packet + 5, pointer_field);
 
-				dsmcc_parse_section(status, pid, buf->data, buf->in_section);
+				dsmcc_parse_section(state, pid, buf->data, buf->in_section);
 				
 				/* zero buffer ? */
-				memset(buf->data, 0xFF, DSMCC_PID_BUFFER_SIZE);
+				memset(buf->data, 0xFF, DSMCC_TSPARSER_BUFFER_SIZE);
 				
 				/* read data upto this and append to buf */
 				buf->in_section = 183 - pointer_field;
@@ -153,11 +153,11 @@ void dsmcc_parse_ts_packet(struct dsmcc_status *status, struct dsmcc_pid_buffer 
 		if (buf->in_section > 0)
 		{
 			/* append data to buf */
-			if (buf->in_section + 184 > DSMCC_PID_BUFFER_SIZE)
+			if (buf->in_section + 184 > DSMCC_TSPARSER_BUFFER_SIZE)
 			{
 				DSMCC_ERROR("Section buffer overflow (buffer is already at %d bytes) (table ID is 0x%02x)", buf->in_section, buf->data[0]);
-				memcpy(buf->data + buf->in_section, packet + 4, DSMCC_PID_BUFFER_SIZE - buf->in_section);
-				buf->in_section = DSMCC_PID_BUFFER_SIZE;
+				memcpy(buf->data + buf->in_section, packet + 4, DSMCC_TSPARSER_BUFFER_SIZE - buf->in_section);
+				buf->in_section = DSMCC_TSPARSER_BUFFER_SIZE;
 			}
 			else
 			{
@@ -172,9 +172,9 @@ void dsmcc_parse_ts_packet(struct dsmcc_status *status, struct dsmcc_pid_buffer 
 	}
 }
 
-void dsmcc_parse_buffered_sections(struct dsmcc_status *status, struct dsmcc_pid_buffer *pid_buffers)
+void dsmcc_tsparser_parse_buffered_sections(struct dsmcc_state *state, struct dsmcc_tsparser_buffer *buffers)
 {
-	struct dsmcc_pid_buffer *buf;
-	for (buf = pid_buffers; buf != NULL; buf = buf->next)
-		dsmcc_parse_section(status, buf->pid, buf->data, buf->in_section);
+	struct dsmcc_tsparser_buffer *buf;
+	for (buf = buffers; buf != NULL; buf = buf->next)
+		dsmcc_parse_section(state, buf->pid, buf->data, buf->in_section);
 }

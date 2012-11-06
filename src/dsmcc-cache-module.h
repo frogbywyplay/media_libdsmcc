@@ -33,8 +33,8 @@ struct dsmcc_cached_module
 };
 
 
-void dsmcc_add_cached_module_info(struct dsmcc_status *status, struct dsmcc_object_carousel *car, struct dsmcc_dii *dii, struct dsmcc_module_info *dmi, struct biop_module_info *bmi);
-void dsmcc_save_cached_module_data(struct dsmcc_status *status, int download_id, struct dsmcc_ddb *ddb, unsigned char *data, int data_length);
+void dsmcc_add_cached_module_info(struct dsmcc_state *state, struct dsmcc_object_carousel *car, struct dsmcc_dii *dii, struct dsmcc_module_info *dmi, struct biop_module_info *bmi);
+void dsmcc_save_cached_module_data(struct dsmcc_state *state, int download_id, struct dsmcc_ddb *ddb, unsigned char *data, int data_length);
 void dsmcc_free_cached_module(struct dsmcc_object_carousel *car, struct dsmcc_cached_module *cachep);
 
 #endif /* DSMCC_CACHE_MODULE_H */

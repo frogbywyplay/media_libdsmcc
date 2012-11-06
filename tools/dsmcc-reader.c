@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include <dsmcc/libdsmcc.h>
+#include <dsmcc/dsmcc.h>
 
 static int running = 1;
 
@@ -42,11 +42,11 @@ static int stream_sub_callback(void *arg, unsigned short assoc_tag)
 	/* TODO find PID from assoc_tag using PMT and SDT */
 	return assoc_tag;
 #if 0
-	struct dsmcc_pid_buffer **pid_buffers = (struct dsmcc_pid_buffer **)arg;
+	struct dsmcc_tsparser_buffer **buffers = (struct dsmcc_tsparser_buffer **)arg;
 
 	int pid = pid_from_assoc_tag(assoc_tag);
 
-	dsmcc_add_pid_buffer(pid_buffers, pid);
+	dsmcc_tsparser_add_pid(buffers, pid);
 #endif
 }
 
@@ -76,7 +76,7 @@ static int cache_callback(void *arg, unsigned long cid, int reason, char *path, 
 	return 1;
 };
 
-static int parse_stream(FILE *ts, struct dsmcc_status *dsmcc_handle, struct dsmcc_pid_buffer **pid_buffers)
+static int parse_stream(FILE *ts, struct dsmcc_state *state, struct dsmcc_tsparser_buffer **buffers)
 {
 	char buf[188];
 	int ret = 0;
@@ -97,14 +97,14 @@ static int parse_stream(FILE *ts, struct dsmcc_status *dsmcc_handle, struct dsmc
 			else
 			{
 				// EOF, parse remaining data
-				dsmcc_parse_buffered_sections(dsmcc_handle, *pid_buffers);
+				dsmcc_tsparser_parse_buffered_sections(state, *buffers);
 			}
 			break;
 		}
 		else
 		{
 			fprintf(stderr, "[main] read ts #%d\n", i++);
-			dsmcc_parse_ts_packet(dsmcc_handle, pid_buffers, (unsigned char*) buf, rc); 
+			dsmcc_tsparser_parse_packet(state, buffers, (unsigned char*) buf, rc); 
 		}
 	}
 
@@ -113,13 +113,13 @@ static int parse_stream(FILE *ts, struct dsmcc_status *dsmcc_handle, struct dsmc
 
 int main(int argc, char **argv)
 {
-	struct dsmcc_status *dsmcc_handle;
+	struct dsmcc_state *state;
 	int status = 0; 
 	char *downloadpath;
 	FILE *ts;
 	uint16_t cid;
 	uint16_t pid;
-	struct dsmcc_pid_buffer *pid_buffers = NULL;
+	struct dsmcc_tsparser_buffer *buffers = NULL;
 
 	if(argc < 4)
 	{
@@ -140,16 +140,16 @@ int main(int argc, char **argv)
 	{
 		dsmcc_set_logger(&logger, DSMCC_LOG_DEBUG);
 
-		dsmcc_handle = dsmcc_open("/tmp/dsmcc/tmp", stream_sub_callback, &pid_buffers);
+		state = dsmcc_open("/tmp/dsmcc/tmp", stream_sub_callback, &buffers);
 
-		dsmcc_add_pid_buffer(&pid_buffers, pid);
+		dsmcc_tsparser_add_pid(&buffers, pid);
 
-		dsmcc_add_carousel(dsmcc_handle, cid, pid, downloadpath, cache_callback, NULL);
+		dsmcc_add_carousel(state, cid, pid, downloadpath, cache_callback, NULL);
 
-		status = parse_stream(ts, dsmcc_handle, &pid_buffers);
+		status = parse_stream(ts, state, &buffers);
 
-		dsmcc_close(dsmcc_handle);
-		dsmcc_free_pid_buffers(&pid_buffers);
+		dsmcc_close(state);
+		dsmcc_tsparser_free_buffers(&buffers);
 	}
 	else
 	{

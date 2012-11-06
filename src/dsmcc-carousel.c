@@ -7,7 +7,7 @@
 #include "dsmcc-cache-file.h"
 #include "dsmcc-biop-ior.h"
 
-void dsmcc_add_carousel(struct dsmcc_status *status, int cid, int pid, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
+void dsmcc_add_carousel(struct dsmcc_state *state, int cid, int pid, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
 {
 	struct dsmcc_object_carousel *car;
 	unsigned short assoc_tag = pid; // TODO
@@ -18,9 +18,9 @@ void dsmcc_add_carousel(struct dsmcc_status *status, int cid, int pid, const cha
 	memset(car, 0, sizeof(struct dsmcc_object_carousel));
 	dsmcc_filecache_init(car, downloadpath, cache_callback, cache_callback_arg);
 	car->id = cid;
-	car->status = status;
-	car->next = status->carousels;
-	status->carousels = car;
+	car->state = state;
+	car->next = state->carousels;
+	state->carousels = car;
 
 	dsmcc_object_carousel_stream_subscribe(car, assoc_tag); 
 }
@@ -34,7 +34,7 @@ int dsmcc_object_carousel_stream_subscribe(struct dsmcc_object_carousel *carouse
 	if (str)
 		return str->pid;
 
-	pid = dsmcc_stream_subscribe(carousel->status, assoc_tag);
+	pid = dsmcc_stream_subscribe(carousel->state, assoc_tag);
 
 	DSMCC_DEBUG("Adding stream with pid 0x%x and assoc_tag 0x%x to carousel %d", pid, assoc_tag, carousel->id);
 

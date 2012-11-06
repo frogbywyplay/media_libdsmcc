@@ -23,7 +23,7 @@
 /**
   * Add module to cache list if no module with same id or version has changed
   */
-void dsmcc_add_cached_module_info(struct dsmcc_status *status, struct dsmcc_object_carousel *car, struct dsmcc_dii *dii, struct dsmcc_module_info *dmi, struct biop_module_info *bmi)
+void dsmcc_add_cached_module_info(struct dsmcc_state *state, struct dsmcc_object_carousel *car, struct dsmcc_dii *dii, struct dsmcc_module_info *dmi, struct biop_module_info *bmi)
 {
 	int num_blocks;
 	struct dsmcc_cached_module *module;
@@ -75,7 +75,7 @@ void dsmcc_add_cached_module_info(struct dsmcc_status *status, struct dsmcc_obje
 	memset(module->bstatus, 0, (num_blocks / 8) + 1);
 	DSMCC_DEBUG("Allocated %d bytes to store status for module %d", (num_blocks / 8) + 1, module->module_id);
 
-	asprintf(&module->data_file, "%s/%lu-%hu-%hhu.data", status->tmpdir, module->carousel_id, module->module_id, module->version);
+	asprintf(&module->data_file, "%s/%lu-%hu-%hhu.data", state->tmpdir, module->carousel_id, module->module_id, module->version);
 
 	/* Subscribe to stream if not already */
 	DSMCC_DEBUG("Subscribing to stream with assoc_tag 0x%x", module->assoc_tag);
@@ -156,7 +156,7 @@ static int dsmcc_module_write_block(const char *filename, unsigned int offset, c
 	return 1;
 }
 
-void dsmcc_save_cached_module_data(struct dsmcc_status *status, int download_id, struct dsmcc_ddb *ddb, unsigned char *data, int data_length)
+void dsmcc_save_cached_module_data(struct dsmcc_state *state, int download_id, struct dsmcc_ddb *ddb, unsigned char *data, int data_length)
 {
 	struct dsmcc_cached_module *module = NULL;
 	struct dsmcc_descriptor *desc = NULL;
@@ -164,7 +164,7 @@ void dsmcc_save_cached_module_data(struct dsmcc_status *status, int download_id,
 
 	/* Scan through known modules and append data */
 
-	car = dsmcc_find_carousel_by_id(status->carousels, download_id);
+	car = dsmcc_find_carousel_by_id(state->carousels, download_id);
 	if (!car)
 	{
 		DSMCC_DEBUG("Data block for module in unknown carousel %ld", download_id);

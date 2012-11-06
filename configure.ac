@@ -5,7 +5,7 @@ AC_PREREQ(2.60)
 AC_INIT([dsmcc], [2.0.0], [dev@wyplay.com])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src],[tools])
-AC_CONFIG_HEADERS([include/dsmcc/config.h])
+#AC_CONFIG_HEADERS([include/dsmcc/config.h])
 
 
 # Checks for programs.
@@ -63,7 +63,7 @@ AM_CONDITIONAL(DEBUG, test x$debug != xfalse)
 
 # REQUIRED_PKG_CONFIG can be used inside dsmcc.pc.in file
 AC_SUBST([REQUIRED_PKG_CONFIG], ${REQUIRED_PKG_CONFIG})
-AC_CONFIG_FILES([ Makefile src/Makefile tools/Makefile dsmcc.pc ])
+AC_CONFIG_FILES([ Makefile Doxyfile src/Makefile tools/Makefile dsmcc.pc ])
 
 ######## Summary of configured options  ########
 AC_MSG_NOTICE([***** Summary *****])
