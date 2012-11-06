@@ -248,10 +248,7 @@ int dsmcc_parse_descriptors(struct dsmcc_descriptor **descriptors, unsigned char
 	{
 		struct dsmcc_descriptor *desc = NULL;
 		ret = dsmcc_parse_one_descriptor(&desc, data + off, data_length - off);
-		if (ret < 0)
-		{
-			// TODO
-		}
+		/* no need to check ret < 0, dsmcc_parse_one_descriptor always succeeds */
 		off += ret;
 
 		if (desc)

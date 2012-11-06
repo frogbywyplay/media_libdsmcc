@@ -288,8 +288,6 @@ static void dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, struc
 	char data_buf[4096];
 	unsigned long copied, cp_size, rret, wret;
 
-	/* TODO create directory structure rather than one big mess! */
-
 	if (file->parent && file->parent->dirpath)
 	{
 		snprintf(dirpath, 1024, "%s/%s", file->parent->dirpath, file->filename);

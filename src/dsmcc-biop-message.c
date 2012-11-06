@@ -202,6 +202,35 @@ static int dsmcc_biop_parse_binding(struct biop_binding *bind, unsigned char *da
 	return off;
 }
 
+static int dsmcc_biop_skip_service_context_list(unsigned char *data, int data_length)
+{
+	int off = 0, i;
+	unsigned char serviceContextList_count;
+
+	serviceContextList_count = data[off];
+	off++;
+
+	if (serviceContextList_count > 0)
+	{
+		DSMCC_DEBUG("Skipping %d service contexts", serviceContextList_count);
+		for (i = 0; i < serviceContextList_count; i++)
+		{
+			unsigned short context_data_length;
+
+			// skip context_id
+			off += 4;
+
+			context_data_length = dsmcc_getshort(data);
+			off += 2;
+
+			// skip context_data_byte
+			off += context_data_length;
+		}
+	}
+
+	return off;
+}
+
 static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, unsigned short module_id, int objkey_len, unsigned char *objkey, unsigned char *data, int data_length)
 {
 	unsigned int i;
@@ -209,8 +238,9 @@ static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, unsigned sho
 	unsigned long msgbody_len;
 	unsigned int bindings_count;
 
-	/* TODO skip service context count */
-	off++;
+	/* skip service context count */
+	ret = dsmcc_biop_skip_service_context_list(data, data_length);
+	off += ret;
 
 	msgbody_len = dsmcc_getlong(data + off);
 	off += 4;
@@ -253,12 +283,13 @@ static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, unsigned sho
 
 static int dsmcc_biop_parse_file(struct dsmcc_file_cache *filecache, int objkey_len, unsigned char *objkey, struct dsmcc_cached_module *module, unsigned int module_offset, unsigned char *data, int data_length)
 {
-	int off = 0;
+	int off = 0, ret;
 	unsigned long msgbody_len;
 	unsigned long content_len;
 
-	/* TODO skip service context count */
-	off++;
+	/* skip service context count */
+	ret = dsmcc_biop_skip_service_context_list(data, data_length);
+	off += ret;
 
 	msgbody_len = dsmcc_getlong(data + off);
 	off += 4;
