@@ -159,16 +159,11 @@ static int dsmcc_parse_biop_service_gateway_info(struct dsmcc_state *state, stru
 		return -1;
 	}
 
-	/* Check carousel id */
-	if (car->id != car->gateway_ior->profile_body.obj_loc.carousel_id)
-	{
-		DSMCC_ERROR("Got service gateway for invalid carousel %d (expected carousel ID %d)", car->gateway_ior->profile_body.obj_loc.carousel_id, car->id);
-		dsmcc_biop_free_ior(car->gateway_ior);
-		car->gateway_ior = NULL;
-		return -1;
-	}
+	/* Init carousel id */
+	if (car->id == 0)
+	       car->id = car->gateway_ior->profile_body.obj_loc.carousel_id;
 
-	DSMCC_DEBUG("Gateway Module %d on carousel %ld", car->gateway_ior->profile_body.obj_loc.module_id, car->id);
+	DSMCC_DEBUG("Gateway for carousel %ld, module %d", car->id, car->gateway_ior->profile_body.obj_loc.module_id);
 
 	/* Subscribe to stream if not already */
 	DSMCC_DEBUG("Subscribing to stream with assoc_tag 0x%x", car->gateway_ior->profile_body.conn_binder.assoc_tag);

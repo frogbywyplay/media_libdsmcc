@@ -40,7 +40,7 @@ static void logger(int severity, const char *message)
 static int stream_sub_callback(void *arg, unsigned short assoc_tag)
 {
 	/* TODO find PID from assoc_tag using PMT and SDT */
-	return assoc_tag;
+	return *((uint16_t *)arg);
 #if 0
 	struct dsmcc_tsparser_buffer **buffers = (struct dsmcc_tsparser_buffer **)arg;
 
@@ -117,19 +117,17 @@ int main(int argc, char **argv)
 	int status = 0; 
 	char *downloadpath;
 	FILE *ts;
-	uint16_t cid;
 	uint16_t pid;
 	struct dsmcc_tsparser_buffer *buffers = NULL;
 
 	if(argc < 4)
 	{
-		fprintf(stderr, "usage %s <file> <cid> <pid> <downloadpath>\n", argv[0]);
+		fprintf(stderr, "usage %s <file> <pid> <downloadpath>\n", argv[0]);
 		return -1;
 	}
 
-	sscanf(argv[2], "%hu", &cid);
-	sscanf(argv[3], "%hu", &pid);
-	downloadpath = argv[4];
+	sscanf(argv[2], "%hu", &pid);
+	downloadpath = argv[3];
 
 	signal(SIGINT, sigint_handler);
 
@@ -140,11 +138,11 @@ int main(int argc, char **argv)
 	{
 		dsmcc_set_logger(&logger, DSMCC_LOG_DEBUG);
 
-		state = dsmcc_open("/tmp/dsmcc/tmp", stream_sub_callback, &buffers);
+		state = dsmcc_open("/tmp/dsmcc/tmp", stream_sub_callback, &pid /*&buffers*/);
 
 		dsmcc_tsparser_add_pid(&buffers, pid);
 
-		dsmcc_add_carousel(state, cid, pid, downloadpath, cache_callback, NULL);
+		dsmcc_add_carousel(state, pid, downloadpath, cache_callback, NULL);
 
 		status = parse_stream(ts, state, &buffers);
 

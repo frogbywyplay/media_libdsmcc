@@ -7,7 +7,7 @@
 #include "dsmcc-cache-file.h"
 #include "dsmcc-biop-ior.h"
 
-void dsmcc_add_carousel(struct dsmcc_state *state, int cid, int pid, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
+void dsmcc_add_carousel(struct dsmcc_state *state, int pid, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
 {
 	struct dsmcc_object_carousel *car;
 	unsigned short assoc_tag = pid; // TODO
@@ -17,7 +17,7 @@ void dsmcc_add_carousel(struct dsmcc_state *state, int cid, int pid, const char 
 	car = malloc(sizeof(struct dsmcc_object_carousel));
 	memset(car, 0, sizeof(struct dsmcc_object_carousel));
 	dsmcc_filecache_init(car, downloadpath, cache_callback, cache_callback_arg);
-	car->id = cid;
+	car->id = 0; /* TODO a carousel ID of 0 is not possible */
 	car->state = state;
 	car->next = state->carousels;
 	state->carousels = car;

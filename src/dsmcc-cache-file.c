@@ -19,7 +19,6 @@
 
 struct dsmcc_cached_dir
 {
-	unsigned long  carousel_id;
 	unsigned short module_id;
 	unsigned int   key_len;
 	unsigned char *key;
@@ -39,7 +38,6 @@ struct dsmcc_cached_dir
 
 struct dsmcc_cached_file
 {
-	unsigned long  carousel_id;
 	unsigned short module_id;
 	unsigned int   key_len;
 	unsigned char *key;
@@ -60,6 +58,8 @@ struct dsmcc_cached_file
 
 struct dsmcc_file_cache
 {
+	struct dsmcc_object_carousel *carousel;
+
 	char *downloadpath;
 
 	dsmcc_cache_callback_t *callback;
@@ -73,8 +73,8 @@ struct dsmcc_file_cache
 
 void dsmcc_filecache_init(struct dsmcc_object_carousel *car, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
 {
-	car->filecache = malloc(sizeof(struct dsmcc_file_cache));
-	memset(car->filecache, 0, sizeof(struct dsmcc_file_cache));
+	car->filecache = calloc(1, sizeof(struct dsmcc_file_cache));
+	car->filecache->carousel = car;
 
 	car->filecache->downloadpath = strdup(downloadpath);
 	if (downloadpath[strlen(downloadpath) - 1] == '/')
@@ -220,21 +220,20 @@ static unsigned int dsmcc_filecache_key_cmp(unsigned char *str1, unsigned int le
 	return 1;
 }
 
-static struct dsmcc_cached_dir *dsmcc_filecache_find_dir_in_subdirs(struct dsmcc_cached_dir *parent, unsigned long car_id, unsigned short module_id, unsigned int key_len, unsigned char *key)
+static struct dsmcc_cached_dir *dsmcc_filecache_find_dir_in_subdirs(struct dsmcc_cached_dir *parent, unsigned short module_id, unsigned int key_len, unsigned char *key)
 {
 	struct dsmcc_cached_dir *dir, *subdir;
 
 	if (!parent)
 		return NULL;
 
-	if ((parent->carousel_id == car_id) && (parent->module_id == module_id) &&
-			dsmcc_filecache_key_cmp(parent->key, parent->key_len, key, key_len))
+	if ((parent->module_id == module_id) && dsmcc_filecache_key_cmp(parent->key, parent->key_len, key, key_len))
 		return parent;
 
 	/* Search sub dirs */
 	for (subdir = parent->sub; subdir != NULL; subdir = subdir->next)
 	{
-		dir = dsmcc_filecache_find_dir_in_subdirs(subdir, car_id, module_id, key_len, key);
+		dir = dsmcc_filecache_find_dir_in_subdirs(subdir, module_id, key_len, key);
 		if (dir)
 			return dir;
 	}
@@ -298,7 +297,7 @@ static void dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, struc
 
 		if (filecache->callback)
 		{
-			int ok = (*filecache->callback)(filecache->callback_arg, file->carousel_id, DSMCC_CACHE_FILE_CHECK, dirpath, fn);
+			int ok = (*filecache->callback)(filecache->callback_arg, filecache->carousel->id, DSMCC_CACHE_FILE_CHECK, dirpath, fn);
 			if (!ok)
 			{
 				DSMCC_DEBUG("Not writing file %s as requested by callback", dirpath);
@@ -369,7 +368,7 @@ static void dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, struc
 		file->data_len = 0;
 
 		if (filecache->callback)
-			(*filecache->callback)(filecache->callback_arg, file->carousel_id, DSMCC_CACHE_FILE_SAVED, dirpath, fn);
+			(*filecache->callback)(filecache->callback_arg, filecache->carousel->id, DSMCC_CACHE_FILE_SAVED, dirpath, fn);
 	}
 	else
 	{
@@ -396,7 +395,7 @@ static void dsmcc_filecache_write_dir(struct dsmcc_file_cache *filecache, struct
 	/* call callback (but not gateway) */
 	if (strlen(dir->name) > 0 && filecache->callback)
 	{
-		int ok = (*filecache->callback)(filecache->callback_arg, dir->carousel_id, DSMCC_CACHE_DIR_CHECK, dir->dirpath, dirbuf);
+		int ok = (*filecache->callback)(filecache->callback_arg, filecache->carousel->id, DSMCC_CACHE_DIR_CHECK, dir->dirpath, dirbuf);
 		if (!ok)
 		{
 			DSMCC_DEBUG("Not creating directory %s as requested by callback", dir->dirpath);
@@ -410,7 +409,7 @@ static void dsmcc_filecache_write_dir(struct dsmcc_file_cache *filecache, struct
 
 	/* call callback (but not gateway) */
 	if (strlen(dir->name) > 0 && filecache->callback)
-		(*filecache->callback)(filecache->callback_arg, dir->carousel_id, DSMCC_CACHE_DIR_SAVED, dir->dirpath, dirbuf);
+		(*filecache->callback)(filecache->callback_arg, filecache->carousel->id, DSMCC_CACHE_DIR_SAVED, dir->dirpath, dirbuf);
 
 	/* Write out files that had arrived before directory */
 	for (file = dir->files; file; file = file->next)
@@ -427,7 +426,7 @@ static void dsmcc_filecache_write_dir(struct dsmcc_file_cache *filecache, struct
 		dsmcc_filecache_write_dir(filecache, subdir);
 }
 
-static struct dsmcc_cached_dir *dsmcc_filecache_cached_dir_find(struct dsmcc_file_cache *filecache, unsigned long car_id, unsigned short module_id, unsigned int key_len, unsigned char *key)
+static struct dsmcc_cached_dir *dsmcc_filecache_cached_dir_find(struct dsmcc_file_cache *filecache, unsigned short module_id, unsigned int key_len, unsigned char *key)
 {
 	struct dsmcc_cached_dir *dir;
 	struct dsmcc_cached_file *file, *filenext;
@@ -445,7 +444,6 @@ static struct dsmcc_cached_dir *dsmcc_filecache_cached_dir_find(struct dsmcc_fil
 		{
 			filecache->gateway = malloc(sizeof(struct dsmcc_cached_dir));
 			memset(filecache->gateway, 0, sizeof(struct dsmcc_cached_dir));
-			filecache->gateway->carousel_id = car_id;
 			filecache->gateway->name = (char *) malloc(1);
 			filecache->gateway->name[0] = '\0';
 			filecache->gateway->dirpath = (char *) malloc(1);
@@ -455,13 +453,13 @@ static struct dsmcc_cached_dir *dsmcc_filecache_cached_dir_find(struct dsmcc_fil
 			for (file = filecache->orphan_files; file; file = filenext)
 			{
 				filenext = file->next;
-				if ((file->carousel_id == filecache->gateway->carousel_id) && (file->p_module_id == filecache->gateway->module_id) &&
+				if ((file->p_module_id == filecache->gateway->module_id) &&
 						dsmcc_filecache_key_cmp(file->p_key, file->p_key_len, filecache->gateway->key, filecache->gateway->key_len))
 					dsmcc_filecache_attach_file(filecache, filecache->gateway, file);
 			}
 
 			for (dir = filecache->orphan_dirs; dir; dir = dir->next) 
-				if ((dir->carousel_id == filecache->gateway->carousel_id) && (dir->p_module_id == filecache->gateway->module_id) &&
+				if ((dir->p_module_id == filecache->gateway->module_id) &&
 						dsmcc_filecache_key_cmp(dir->p_key, dir->p_key_len, filecache->gateway->key, filecache->gateway->key_len))
 					dsmcc_filecache_attach_dir(filecache, filecache->gateway, dir);
 
@@ -471,20 +469,20 @@ static struct dsmcc_cached_dir *dsmcc_filecache_cached_dir_find(struct dsmcc_fil
 	}
 
 	/* Find dir */
-	dir = dsmcc_filecache_find_dir_in_subdirs(filecache->gateway, car_id, module_id, key_len, key);
+	dir = dsmcc_filecache_find_dir_in_subdirs(filecache->gateway, module_id, key_len, key);
 	if (dir == NULL)
 	{
 		struct dsmcc_cached_dir *d;
 
 		/* Try looking in orphan dirs */
 		for (d = filecache->orphan_dirs; !dir && d; d = d->next)
-			dir = dsmcc_filecache_find_dir_in_subdirs(d, car_id, module_id, key_len, key);
+			dir = dsmcc_filecache_find_dir_in_subdirs(d, module_id, key_len, key);
 	}
 
 	return dir;
 }
 
-static struct dsmcc_cached_file *dsmcc_filecache_find_file_in_dir(struct dsmcc_cached_dir *dir, unsigned long car_id, unsigned int mod_id, unsigned int key_len, unsigned char *key)
+static struct dsmcc_cached_file *dsmcc_filecache_find_file_in_dir(struct dsmcc_cached_dir *dir, unsigned int mod_id, unsigned int key_len, unsigned char *key)
 {
 	struct dsmcc_cached_file *file;
 	struct dsmcc_cached_dir *subdir;
@@ -495,14 +493,14 @@ static struct dsmcc_cached_file *dsmcc_filecache_find_file_in_dir(struct dsmcc_c
 	/* Search files in this dir */
 	for (file = dir->files; file != NULL; file = file->next)
 	{
-		if ((file->carousel_id == car_id) && (file->module_id == mod_id) && dsmcc_filecache_key_cmp(file->key, file->key_len, key, key_len))
+		if ((file->module_id == mod_id) && dsmcc_filecache_key_cmp(file->key, file->key_len, key, key_len))
 			return file;
 	}
 
 	/* Search sub dirs */
 	for (subdir = dir->sub; subdir != NULL; subdir = subdir->next)
 	{
-		file = dsmcc_filecache_find_file_in_dir(subdir, car_id, mod_id, key_len, key);
+		file = dsmcc_filecache_find_file_in_dir(subdir, mod_id, key_len, key);
 		if (file)
 			return file;
 	}
@@ -510,19 +508,19 @@ static struct dsmcc_cached_file *dsmcc_filecache_find_file_in_dir(struct dsmcc_c
 	return NULL;
 }
 
-static struct dsmcc_cached_file *dsmcc_filecache_find_file(struct dsmcc_file_cache *filecache, unsigned long car_id, unsigned short module_id, unsigned int key_len, unsigned char *key)
+static struct dsmcc_cached_file *dsmcc_filecache_find_file(struct dsmcc_file_cache *filecache, unsigned short module_id, unsigned int key_len, unsigned char *key)
 {
 	struct dsmcc_cached_file *file;
 
 	/* Try looking in parent-less list */
 	for (file = filecache->orphan_files; file != NULL; file = file->next)
 	{
-		if ((file->carousel_id == car_id) && (file->module_id == module_id) && dsmcc_filecache_key_cmp(file->key, file->key_len, key, key_len))
+		if ((file->module_id == module_id) && dsmcc_filecache_key_cmp(file->key, file->key_len, key, key_len))
 			return file;
 	}
 
 	/* Scan through known files and return details if known else NULL */
-	file = dsmcc_filecache_find_file_in_dir(filecache->gateway, car_id, module_id, key_len, key);
+	file = dsmcc_filecache_find_file_in_dir(filecache->gateway, module_id, key_len, key);
 
 	return file;
 }
@@ -532,7 +530,13 @@ void dsmcc_filecache_cache_dir_info(struct dsmcc_file_cache *filecache, unsigned
 	struct dsmcc_cached_dir *dir, *subdir;
 	struct dsmcc_cached_file *file, *nf;
 
-	dir = dsmcc_filecache_cached_dir_find(filecache, binding->ior->profile_body.obj_loc.carousel_id, binding->ior->profile_body.obj_loc.module_id,
+	if (filecache->carousel->id != binding->ior->profile_body.obj_loc.carousel_id)
+	{
+		DSMCC_ERROR("Got a request to cache dir info for an invalid carousel %ld (expected %ld)", binding->ior->profile_body.obj_loc.carousel_id, filecache->carousel->id);
+		return;
+	}
+
+	dir = dsmcc_filecache_cached_dir_find(filecache, binding->ior->profile_body.obj_loc.module_id,
 			binding->ior->profile_body.obj_loc.objkey_len, binding->ior->profile_body.obj_loc.objkey);
 	if (dir)
 		return; /* Already got */
@@ -541,7 +545,6 @@ void dsmcc_filecache_cache_dir_info(struct dsmcc_file_cache *filecache, unsigned
 	memset(dir, 0, sizeof(struct dsmcc_cached_dir));
 	dir->name = malloc(binding->name->id_len);
 	memcpy(dir->name, binding->name->id, binding->name->id_len);
-	dir->carousel_id = binding->ior->profile_body.obj_loc.carousel_id;
 	dir->module_id = binding->ior->profile_body.obj_loc.module_id;
 	dir->key_len = binding->ior->profile_body.obj_loc.objkey_len;
 	if (dir->key_len > 0)
@@ -556,7 +559,7 @@ void dsmcc_filecache_cache_dir_info(struct dsmcc_file_cache *filecache, unsigned
 		dir->p_key = malloc(dir->p_key_len);
 		memcpy(dir->p_key, objkey, objkey_len);
 	}
-	dir->parent = dsmcc_filecache_cached_dir_find(filecache, dir->carousel_id, module_id, objkey_len, objkey);
+	dir->parent = dsmcc_filecache_cached_dir_find(filecache, module_id, objkey_len, objkey);
 
 	if (!dir->p_key_len || !dir->p_key)
 		DSMCC_DEBUG("Caching dir %s (with parent %d/%d)", dir->name, dir->p_module_id, dir->p_key_len);
@@ -586,8 +589,7 @@ void dsmcc_filecache_cache_dir_info(struct dsmcc_file_cache *filecache, unsigned
 	for (file = filecache->orphan_files; file != NULL; file = nf)
 	{
 		nf = file->next;
-		if ((file->carousel_id == dir->carousel_id) && (file->p_module_id == dir->module_id) &&
-				dsmcc_filecache_key_cmp(file->p_key, file->p_key_len, dir->key, dir->key_len))
+		if ((file->p_module_id == dir->module_id) && dsmcc_filecache_key_cmp(file->p_key, file->p_key_len, dir->key, dir->key_len))
 		{
 			DSMCC_DEBUG("Attaching previously arrived file %s to newly created directory %s", file->filename, dir->name);
 			dsmcc_filecache_attach_file(filecache, dir, file);
@@ -596,8 +598,7 @@ void dsmcc_filecache_cache_dir_info(struct dsmcc_file_cache *filecache, unsigned
 
 	/* Attach any subdirs that arrived beforehand */
 	for (subdir = filecache->orphan_dirs; subdir != NULL; subdir = subdir->next)
-		if ((subdir->carousel_id == dir->carousel_id) && (subdir->p_module_id == dir->module_id) &&
-				dsmcc_filecache_key_cmp(subdir->p_key, subdir->p_key_len, dir->key, dir->key_len))
+		if ((subdir->p_module_id == dir->module_id) && dsmcc_filecache_key_cmp(subdir->p_key, subdir->p_key_len, dir->key, dir->key_len))
 			dsmcc_filecache_attach_dir(filecache, dir, subdir);
 
 	if (dir->parent && dir->parent->dirpath)
@@ -609,23 +610,22 @@ void dsmcc_filecache_cache_file(struct dsmcc_file_cache *filecache, unsigned cha
 	struct dsmcc_cached_file *file;
 
 	/* search for file info */
-	file = dsmcc_filecache_find_file(filecache, cachep->carousel_id, cachep->module_id, objkey_len, objkey);
+	file = dsmcc_filecache_find_file(filecache, cachep->module_id, objkey_len, objkey);
 	if (!file)
 	{
 		/* Not known yet. Save data */
 		if (objkey_len == 3)
-			DSMCC_DEBUG("Unknown file %ld/%d/%d/%02x%02x%02x, caching data", cachep->carousel_id, cachep->module_id, objkey_len, objkey[0], objkey[1], objkey[2]);
+			DSMCC_DEBUG("Unknown file %ld/%d/%d/%02x%02x%02x, caching data", filecache->carousel->id, cachep->module_id, objkey_len, objkey[0], objkey[1], objkey[2]);
 		else if (objkey_len == 4)
-			DSMCC_DEBUG("Unknown file %ld/%d/%d/%02x%02x%02x%02x, caching data", cachep->carousel_id, cachep->module_id, objkey_len, objkey[0], objkey[1], objkey[2], objkey[3]);
+			DSMCC_DEBUG("Unknown file %ld/%d/%d/%02x%02x%02x%02x, caching data", filecache->carousel->id, cachep->module_id, objkey_len, objkey[0], objkey[1], objkey[2], objkey[3]);
 		else
-			DSMCC_DEBUG("Unknown file %ld/%d/%d, caching data", cachep->carousel_id, cachep->module_id, objkey_len);
+			DSMCC_DEBUG("Unknown file %ld/%d/%d, caching data", filecache->carousel->id, cachep->module_id, objkey_len);
 
 		file = malloc(sizeof(struct dsmcc_cached_file));
 		memset(file, 0, sizeof(struct dsmcc_cached_file));
 		file->data_len = content_len;
 		file->module_offset = module_offset;
 		file->module_file = strdup(cachep->data_file);
-		file->carousel_id= cachep->carousel_id;
 		file->module_id= cachep->module_id;
 		file->key_len= objkey_len;
 		if (file->key_len > 0)
@@ -657,14 +657,13 @@ void dsmcc_filecache_cache_file(struct dsmcc_file_cache *filecache, unsigned cha
 	}
 }
 
-static struct dsmcc_cached_file *dsmcc_filecache_find_file_data(struct dsmcc_file_cache *filecache, unsigned long car_id, unsigned short mod_id, unsigned int key_len, unsigned char *key)
+static struct dsmcc_cached_file *dsmcc_filecache_find_file_data(struct dsmcc_file_cache *filecache, unsigned short mod_id, unsigned int key_len, unsigned char *key)
 {
 	struct dsmcc_cached_file *last;
 
 	for (last = filecache->nameless_files; last != NULL; last = last->next)
 	{
-		if ((last->carousel_id == car_id) && (last->module_id == mod_id)
-				&& dsmcc_filecache_key_cmp(key, key_len, last->key, last->key_len))
+		if ((last->module_id == mod_id) && dsmcc_filecache_key_cmp(key, key_len, last->key, last->key_len))
 			break;
 	}
 
@@ -691,15 +690,19 @@ void dsmcc_filecache_cache_file_info(struct dsmcc_file_cache *filecache, unsigne
 	struct dsmcc_cached_file *newfile;
 	struct dsmcc_cached_dir *dir;
 
-	DSMCC_DEBUG("Caching file info");
+	if (filecache->carousel->id != binding->ior->profile_body.obj_loc.carousel_id)
+	{
+		DSMCC_ERROR("Got a request to cache dir info for an invalid carousel %ld (expected %ld)", binding->ior->profile_body.obj_loc.carousel_id, filecache->carousel->id);
+		return;
+	}
 
 	// Check we do not already have file (or file info) cached 
-	if (dsmcc_filecache_find_file(filecache, binding->ior->profile_body.obj_loc.carousel_id, binding->ior->profile_body.obj_loc.module_id,
+	if (dsmcc_filecache_find_file(filecache, binding->ior->profile_body.obj_loc.module_id,
 			binding->ior->profile_body.obj_loc.objkey_len, binding->ior->profile_body.obj_loc.objkey))
 		return;
 
 	// See if the data had already arrived for the file 
-	newfile = dsmcc_filecache_find_file_data(filecache, binding->ior->profile_body.obj_loc.carousel_id, binding->ior->profile_body.obj_loc.module_id,
+	newfile = dsmcc_filecache_find_file_data(filecache, binding->ior->profile_body.obj_loc.module_id,
 			binding->ior->profile_body.obj_loc.objkey_len, binding->ior->profile_body.obj_loc.objkey);
 	
 	if (!newfile)
@@ -708,7 +711,6 @@ void dsmcc_filecache_cache_file_info(struct dsmcc_file_cache *filecache, unsigne
 		DSMCC_DEBUG("Data not arrived for file %s, caching", binding->name->id);
 		newfile = malloc(sizeof(struct dsmcc_cached_file));
 		memset(newfile, 0, sizeof(struct dsmcc_cached_file));
-		newfile->carousel_id = binding->ior->profile_body.obj_loc.carousel_id;
 		newfile->module_id = binding->ior->profile_body.obj_loc.module_id;
 		newfile->key_len = binding->ior->profile_body.obj_loc.objkey_len;
 		if (newfile->key_len > 0)
@@ -725,11 +727,11 @@ void dsmcc_filecache_cache_file_info(struct dsmcc_file_cache *filecache, unsigne
 	newfile->filename = malloc(binding->name->id_len);
 	memcpy(newfile->filename, binding->name->id, binding->name->id_len);
 
-	dir = dsmcc_filecache_cached_dir_find(filecache, newfile->carousel_id, mod_id, key_len, key);
+	dir = dsmcc_filecache_cached_dir_find(filecache, mod_id, key_len, key);
 	if (!dir)
 	{
 		/* Parent directory not yet known */
-		DSMCC_DEBUG("Caching info for file %s with unknown parent dir (file info - %ld/%d/%d/%02x%02x%02x%02x)", newfile->filename, newfile->carousel_id, newfile->module_id, newfile->key_len, newfile->key[0], newfile->key[1], newfile->key[2], newfile->key[3]);
+		DSMCC_DEBUG("Caching info for file %s with unknown parent dir (file info - %ld/%d/%d/%02x%02x%02x%02x)", newfile->filename, filecache->carousel->id, newfile->module_id, newfile->key_len, newfile->key[0], newfile->key[1], newfile->key[2], newfile->key[3]);
 
 		newfile->p_module_id = mod_id;
 		newfile->p_key_len = key_len;
@@ -750,7 +752,7 @@ void dsmcc_filecache_cache_file_info(struct dsmcc_file_cache *filecache, unsigne
 	}
 	else
 	{
-		DSMCC_DEBUG("Caching info for file %s with known parent dir (file info - %ld/%d/%d/%02x%02x%02x%02x)", newfile->filename, newfile->carousel_id, newfile->module_id, newfile->key_len, newfile->key[0], newfile->key[1], newfile->key[2], newfile->key[3]);
+		DSMCC_DEBUG("Caching info for file %s with known parent dir (file info - %ld/%d/%d/%02x%02x%02x%02x)", newfile->filename, filecache->carousel->id, newfile->module_id, newfile->key_len, newfile->key[0], newfile->key[1], newfile->key[2], newfile->key[3]);
 
 		newfile->p_key_len = dir->key_len;
 		if (newfile->p_key_len > 0)

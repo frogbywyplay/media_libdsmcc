@@ -14,7 +14,6 @@ struct dsmcc_ddb;
 
 struct dsmcc_cached_module
 {
-	unsigned long  carousel_id;
 	unsigned short module_id;
 	unsigned short assoc_tag;
 	unsigned char  version;

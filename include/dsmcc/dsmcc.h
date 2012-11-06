@@ -117,13 +117,12 @@ typedef int (dsmcc_cache_callback_t)(void *arg, unsigned long cid, int reason, c
 
 /** \brief Add a carousel to the list of carousels to be parsed
   * \param state the library state
-  * \param cid the carousel ID
   * \param pid the PID of the stream where the carousel DSI message will be broadcasted
   * \param downloadpath the directory where the carousel files will be downloaded
   * \param cache_callback the callback that will be called before/after each directory or file creation
   * \param cache_callback_arg this will be passed as-is as first argument to the callback
   */
-void dsmcc_add_carousel(struct dsmcc_state *state, int cid, int pid, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg);
+void dsmcc_add_carousel(struct dsmcc_state *state, int pid, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg);
 
 /** \} */ // end of 'control' group
 

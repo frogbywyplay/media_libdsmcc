@@ -30,8 +30,7 @@ void dsmcc_add_cached_module_info(struct dsmcc_state *state, struct dsmcc_object
 
 	for (module = car->modules; module; module = module->next)
 	{
-		if (module->carousel_id == dii->download_id
-				&& module->module_id == dmi->module_id)
+		if (car->id == dii->download_id && module->module_id == dmi->module_id)
 		{
 			if (module->version == dmi->module_version)
 			{
@@ -58,7 +57,6 @@ void dsmcc_add_cached_module_info(struct dsmcc_state *state, struct dsmcc_object
 		module->next->prev = module;
 	car->modules = module;
 
-	module->carousel_id = dii->download_id;
 	module->module_id = dmi->module_id;
 	module->version = dmi->module_version;
 	module->total_size = dmi->module_size;
@@ -75,7 +73,7 @@ void dsmcc_add_cached_module_info(struct dsmcc_state *state, struct dsmcc_object
 	memset(module->bstatus, 0, (num_blocks / 8) + 1);
 	DSMCC_DEBUG("Allocated %d bytes to store status for module %d", (num_blocks / 8) + 1, module->module_id);
 
-	asprintf(&module->data_file, "%s/%lu-%hu-%hhu.data", state->tmpdir, module->carousel_id, module->module_id, module->version);
+	asprintf(&module->data_file, "%s/%lu-%hu-%hhu.data", state->tmpdir, car->id, module->module_id, module->version);
 
 	/* Subscribe to stream if not already */
 	DSMCC_DEBUG("Subscribing to stream with assoc_tag 0x%x", module->assoc_tag);
@@ -175,7 +173,7 @@ void dsmcc_save_cached_module_data(struct dsmcc_state *state, int download_id, s
 
 	for (module = car->modules; module; module = module->next)
 	{
-		if (module->carousel_id == download_id && module->module_id == ddb->module_id)
+		if (car->id == download_id && module->module_id == ddb->module_id)
 		{
 			DSMCC_DEBUG("Found linking module (%d)...", ddb->module_id);
 			break;
