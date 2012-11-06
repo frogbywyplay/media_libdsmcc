@@ -14,13 +14,10 @@ struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callba
 {
 	struct dsmcc_state *state = NULL;
 
-	state = malloc(sizeof(struct dsmcc_state));
-	memset(state, 0, sizeof(struct dsmcc_state));
+	state = calloc(1, sizeof(struct dsmcc_state));
 
 	state->stream_sub_callback = stream_sub_callback;
 	state->stream_sub_callback_arg = stream_sub_callback_arg;
-
-	state->streams = NULL;
 
 	if (tmpdir != NULL && strlen(tmpdir) > 0)
 	{
@@ -38,7 +35,7 @@ struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callba
 	return state;
 }
 
-struct dsmcc_stream *dsmcc_find_stream_by_pid(struct dsmcc_stream *streams, int pid)
+struct dsmcc_stream *dsmcc_find_stream_by_pid(struct dsmcc_stream *streams, unsigned short pid)
 {
 	struct dsmcc_stream *str;
 
@@ -64,16 +61,27 @@ struct dsmcc_stream *dsmcc_find_stream_by_assoc_tag(struct dsmcc_stream *streams
 	return str;
 }
 
-int dsmcc_stream_subscribe(struct dsmcc_state *state, unsigned int assoc_tag)
+unsigned short dsmcc_stream_subscribe(struct dsmcc_state *state, unsigned short assoc_tag)
 {
 	struct dsmcc_stream *str;
-	int pid;
+	unsigned short pid;
 
 	str = dsmcc_find_stream_by_assoc_tag(state->streams, assoc_tag);
 	if (str)
 		return str->pid;
 
 	pid = (*state->stream_sub_callback)(state->stream_sub_callback_arg, assoc_tag);
+
+	str = dsmcc_find_stream_by_pid(state->streams, pid);
+	if (str)
+	{
+		if (str->assoc_tag != assoc_tag)
+		{
+			DSMCC_DEBUG("Changing assoc_tag for stream with pid 0x%x from 0x%x to 0x%x", pid, str->assoc_tag, assoc_tag);
+			str->assoc_tag = assoc_tag;
+		}
+		return str->pid;
+	}
 
 	DSMCC_DEBUG("Adding stream with pid 0x%x and assoc_tag 0x%x", pid, assoc_tag);
 
@@ -86,10 +94,10 @@ int dsmcc_stream_subscribe(struct dsmcc_state *state, unsigned int assoc_tag)
 	str->prev = NULL;
 	state->streams = str;
 
-	return pid;
+	return str->pid;
 }
 
-static void dsmcc_free_streams(struct dsmcc_stream *stream)
+void dsmcc_free_streams(struct dsmcc_stream *stream)
 {
 	while (stream)
 	{

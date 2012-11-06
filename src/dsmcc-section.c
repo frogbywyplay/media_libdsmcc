@@ -207,15 +207,13 @@ static int dsmcc_parse_section_dsi(struct dsmcc_state *state, unsigned char *dat
         int off = 0, ret;
 	unsigned short i, dsi_data_length;
 	struct dsmcc_object_carousel *car;
-	struct dsmcc_stream *str;
 
 	DSMCC_DEBUG("Setting gateway for pid %d", pid);
 
 	/* Find which object carousel this pid's data belongs to */
 	for (car = state->carousels; car; car = car->next)
 	{
-		str = dsmcc_find_stream_by_pid(car->streams, pid);
-		if (str)
+		if (dsmcc_find_stream_by_pid(car->streams, pid))
 		{
 			if (car->gateway_ior)
 			{

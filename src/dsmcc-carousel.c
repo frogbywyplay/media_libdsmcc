@@ -7,12 +7,40 @@
 #include "dsmcc-cache-file.h"
 #include "dsmcc-biop-ior.h"
 
+static struct dsmcc_stream *dsmcc_object_carousel_stream_subscribe_by_pid(struct dsmcc_object_carousel *carousel, unsigned short pid)
+{
+	struct dsmcc_stream *str;
+
+	str = dsmcc_find_stream_by_pid(carousel->streams, pid);
+	if (str)
+		return str;
+
+	DSMCC_DEBUG("Adding stream with pid 0x%x to carousel %d", pid, carousel->id);
+
+	str = calloc(1, sizeof(struct dsmcc_stream));
+	str->pid = pid;
+	str->next = carousel->streams;
+	if (str->next)
+		str->next->prev = str;
+	str->prev = NULL;
+	carousel->streams = str;
+
+	return str;
+}
+
 void dsmcc_add_carousel(struct dsmcc_state *state, int pid, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
 {
 	struct dsmcc_object_carousel *car;
-	unsigned short assoc_tag = pid; // TODO
 
-	// TODO check that carousel is not already requested
+	// Check that carousel is not already requested
+	for (car = state->carousels; car; car = car->next)
+	{
+		if (dsmcc_find_stream_by_pid(car->streams, pid))
+		{
+			DSMCC_ERROR("Carousel for PID 0x%x already registered", pid);
+			return;
+		}
+	}
 
 	car = malloc(sizeof(struct dsmcc_object_carousel));
 	memset(car, 0, sizeof(struct dsmcc_object_carousel));
@@ -22,32 +50,23 @@ void dsmcc_add_carousel(struct dsmcc_state *state, int pid, const char *download
 	car->next = state->carousels;
 	state->carousels = car;
 
-	dsmcc_object_carousel_stream_subscribe(car, assoc_tag); 
+	dsmcc_object_carousel_stream_subscribe_by_pid(car, pid); 
 }
 
-int dsmcc_object_carousel_stream_subscribe(struct dsmcc_object_carousel *carousel, unsigned int assoc_tag)
+void dsmcc_object_carousel_stream_subscribe(struct dsmcc_object_carousel *carousel, unsigned short assoc_tag)
 {
 	struct dsmcc_stream *str;
-	int pid;
+	unsigned short pid;
 
 	str = dsmcc_find_stream_by_assoc_tag(carousel->streams, assoc_tag);
 	if (str)
-		return str->pid;
+		return;
 
 	pid = dsmcc_stream_subscribe(carousel->state, assoc_tag);
 
-	DSMCC_DEBUG("Adding stream with pid 0x%x and assoc_tag 0x%x to carousel %d", pid, assoc_tag, carousel->id);
-
-	str = malloc(sizeof(struct dsmcc_stream));
-	str->pid = pid;
-	str->assoc_tag = assoc_tag;
-	str->next = carousel->streams;
-	if (str->next)
-		str->next->prev = str;
-	str->prev = NULL;
-	carousel->streams = str;
-
-	return pid;
+	str = dsmcc_object_carousel_stream_subscribe_by_pid(carousel, pid);
+	if (str->assoc_tag != assoc_tag)
+		str->assoc_tag = assoc_tag;
 }
 
 struct dsmcc_object_carousel *dsmcc_find_carousel_by_id(struct dsmcc_object_carousel *carousels, int id)
@@ -63,20 +82,12 @@ struct dsmcc_object_carousel *dsmcc_find_carousel_by_id(struct dsmcc_object_caro
 
 static void dsmcc_object_carousel_free(struct dsmcc_object_carousel *car)
 {
-	struct dsmcc_stream *str, *strnext;
-
 	/* Free gateway */
 	dsmcc_biop_free_ior(car->gateway_ior);
 	car->gateway_ior = NULL;
 
 	/* Free streams */
-	str = car->streams;
-	while (str != NULL)
-	{
-		strnext = str->next;
-		free(str);
-		str = strnext;
-	}
+	dsmcc_free_streams(car->streams);
 	car->streams = NULL;
 
 	/* Free cached modules */
