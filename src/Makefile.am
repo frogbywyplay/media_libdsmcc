@@ -8,34 +8,34 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src
 
 noinst_HEADERS = \
-	$(top_srcdir)/src/dsmcc-biop-ior.h \
-	$(top_srcdir)/src/dsmcc-biop-message.h \
-	$(top_srcdir)/src/dsmcc-biop-module.h \
-	$(top_srcdir)/src/dsmcc-biop-tap.h \
-	$(top_srcdir)/src/dsmcc-cache-file.h \
-	$(top_srcdir)/src/dsmcc-cache-module.h \
-	$(top_srcdir)/src/dsmcc-carousel.h \
-	$(top_srcdir)/src/dsmcc-debug.h \
-	$(top_srcdir)/src/dsmcc-descriptor.h \
-	$(top_srcdir)/src/dsmcc.h \
-	$(top_srcdir)/src/dsmcc-section.h \
-	$(top_srcdir)/src/dsmcc-ts.h \
-	$(top_srcdir)/src/dsmcc-util.h
+	dsmcc-biop-ior.h \
+	dsmcc-biop-message.h \
+	dsmcc-biop-module.h \
+	dsmcc-biop-tap.h \
+	dsmcc-cache-file.h \
+	dsmcc-cache-module.h \
+	dsmcc-carousel.h \
+	dsmcc-debug.h \
+	dsmcc-descriptor.h \
+	dsmcc.h \
+	dsmcc-section.h \
+	dsmcc-ts.h \
+	dsmcc-util.h
 
 libdsmcc_so_HEADERS = \
-	$(top_srcdir)/include/dsmcc/dsmcc.h
+	../include/dsmcc/dsmcc.h
 
 libdsmcc_so_SOURCES = \
-	$(top_srcdir)/src/dsmcc-biop-ior.c \
-	$(top_srcdir)/src/dsmcc-biop-tap.c \
-	$(top_srcdir)/src/dsmcc-descriptor.c \
-	$(top_srcdir)/src/dsmcc-ts.c \
-	$(top_srcdir)/src/dsmcc-cache-module.c \
-	$(top_srcdir)/src/dsmcc-debug.c \
-	$(top_srcdir)/src/dsmcc.c \
-	$(top_srcdir)/src/dsmcc-biop-message.c \
-	$(top_srcdir)/src/dsmcc-biop-module.c \
-	$(top_srcdir)/src/dsmcc-section.c \
-	$(top_srcdir)/src/dsmcc-util.c \
-	$(top_srcdir)/src/dsmcc-cache-file.c \
-	$(top_srcdir)/src/dsmcc-carousel.c
+	dsmcc-biop-ior.c \
+	dsmcc-biop-tap.c \
+	dsmcc-descriptor.c \
+	dsmcc-ts.c \
+	dsmcc-cache-module.c \
+	dsmcc-debug.c \
+	dsmcc.c \
+	dsmcc-biop-message.c \
+	dsmcc-biop-module.c \
+	dsmcc-section.c \
+	dsmcc-util.c \
+	dsmcc-cache-file.c \
+	dsmcc-carousel.c
