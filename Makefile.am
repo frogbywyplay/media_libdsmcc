@@ -1,4 +1,4 @@
-SUBDIRS = src tools
+SUBDIRS = include src tools
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = dsmcc.pc

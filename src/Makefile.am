@@ -27,8 +27,6 @@ noinst_HEADERS = \
 	dsmcc-section.h \
 	dsmcc-ts.h \
 	dsmcc-util.h
-include_HEADERS = \
-	../include/dsmcc/dsmcc.h
 
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \

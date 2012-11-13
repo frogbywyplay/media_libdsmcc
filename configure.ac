@@ -62,7 +62,7 @@ AM_CONDITIONAL(DEBUG, test x$debug != xfalse)
 
 # REQUIRED_PKG_CONFIG can be used inside dsmcc.pc.in file
 AC_SUBST([REQUIRED_PKG_CONFIG], ${REQUIRED_PKG_CONFIG})
-AC_CONFIG_FILES([ Makefile Doxyfile src/Makefile tools/Makefile dsmcc.pc ])
+AC_CONFIG_FILES([ Makefile Doxyfile include/Makefile src/Makefile tools/Makefile dsmcc.pc ])
 
 ######## Summary of configured options  ########
 AC_MSG_NOTICE([***** Summary *****])
