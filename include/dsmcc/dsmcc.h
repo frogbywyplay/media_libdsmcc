@@ -66,7 +66,7 @@ struct dsmcc_state;
 /** \brief Initialize the DSM-CC parser
   * @param tmpdir the temporary directory that will be used. Will be created if not already existent. If NULL, it will default to /tmp/dsmcc-XYZ (where XYZ is the PID of the current process)
   * @param stream_sub_callback the callback that will be called when the library needs to subscribe to new streams
-  * @param stream_sub_callbacl_arg this will be passed as-is as first argument to the callback
+  * @param stream_sub_callback_arg this will be passed as-is as first argument to the callback
   */
 struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callback_t *stream_sub_callback, void *stream_sub_callback_arg);
 
