@@ -286,7 +286,8 @@ static void dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, struc
 	FILE *data_fd, *module_fd;
 	char fn[1024], dirpath[1024];
 	char data_buf[4096];
-	unsigned long copied, cp_size, rret, wret;
+	unsigned long copied, cp_size;
+	int rret, wret;
 
 	if (file->parent && file->parent->dirpath)
 	{

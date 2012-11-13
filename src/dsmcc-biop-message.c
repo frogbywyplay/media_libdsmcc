@@ -21,6 +21,8 @@ static int dsmcc_biop_parse_msg_header(struct biop_msg_header *header, unsigned 
 	unsigned long magic;
 	unsigned short objinfo_len;
 
+	(void) data_length; /* TODO check data length */
+
 	magic = dsmcc_getlong(data);
 	off += 4;
 	if (magic != BIOP_MAGIC)
@@ -105,6 +107,8 @@ static int dsmcc_biop_parse_name(struct biop_name *name, unsigned char *data, in
 {
 	int off = 0;
 	unsigned char comp_count;
+
+	(void) data_length; /* TODO check data length */
 
 	comp_count = data[off];
 	off++;
@@ -206,6 +210,8 @@ static int dsmcc_biop_skip_service_context_list(unsigned char *data, int data_le
 {
 	int off = 0, i;
 	unsigned char serviceContextList_count;
+
+	(void) data_length; /* TODO check data length */
 
 	serviceContextList_count = data[off];
 	off++;

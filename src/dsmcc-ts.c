@@ -11,7 +11,7 @@
 #define DSMCC_TRANSPORT_ERROR	0x80
 #define DSMCC_START_INDICATOR	0x40
 
-void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, int pid)
+void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, unsigned int pid)
 {
 	struct dsmcc_tsparser_buffer *buf;
 
@@ -50,7 +50,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 {
 	struct dsmcc_tsparser_buffer *buf;
 	unsigned int pid;
-	unsigned int cont;
+	int cont;
 
 	if (packet_length <= 0 || packet_length != 188)
 	{

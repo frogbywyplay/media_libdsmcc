@@ -50,6 +50,8 @@ static int dsmcc_parse_section_header(struct dsmcc_section_header *header, unsig
 	int private_indicator;
 	int crc;
 
+	(void) data_length; /* TODO check data length */
+
 	header->table_id = data[off];
 	off++;
 
@@ -91,6 +93,8 @@ static int dsmcc_parse_message_header(struct dsmcc_message_header *header, unsig
 {
 	int off = 0;
 	unsigned char protocol, type, adaptation_length;
+
+	(void) data_length; /* TODO check data length */
 
 	protocol = data[off];
 	off++;
@@ -137,7 +141,7 @@ static int dsmcc_parse_message_header(struct dsmcc_message_header *header, unsig
 /*
  * ETSI TR 101 202 Table 4.15
  */
-static int dsmcc_parse_biop_service_gateway_info(struct dsmcc_state *state, struct dsmcc_object_carousel *car, unsigned char *data, int data_length)
+static int dsmcc_parse_biop_service_gateway_info(struct dsmcc_object_carousel *car, unsigned char *data, int data_length)
 {
 	int off = 0, ret;
 	unsigned char tmp;
@@ -254,7 +258,7 @@ static int dsmcc_parse_section_dsi(struct dsmcc_state *state, unsigned char *dat
 	DSMCC_DEBUG("Data Length: %d", dsi_data_length);
 
 	DSMCC_DEBUG("Processing BIOP::ServiceGatewayInfo...");
-	ret = dsmcc_parse_biop_service_gateway_info(state, car, data + off, data_length - off);
+	ret = dsmcc_parse_biop_service_gateway_info(car, data + off, data_length - off);
 	if (ret < 0)
 	{
 		DSMCC_ERROR("DSI -> dsmcc_parse_biop_service_gateway_info returned %d", ret);
@@ -399,6 +403,8 @@ static int dsmcc_parse_data_header(struct dsmcc_data_header *header, unsigned ch
 	int off = 0;
 	unsigned char protocol, type, adaptation_length;
 	unsigned short message_id;
+
+	(void) length; /* TODO check data length */
 
 	protocol = data[off];
 	off++;

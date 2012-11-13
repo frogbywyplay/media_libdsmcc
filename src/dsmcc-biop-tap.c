@@ -12,6 +12,8 @@ int dsmcc_biop_parse_tap(struct biop_tap *tap, unsigned char *data, int data_len
 {
 	int off = 0;
 
+	(void) data_length; /* TODO check data length */
+
 	tap->id = dsmcc_getshort(data);
 	off += 2;
 	DSMCC_DEBUG("ID = 0x%x",tap->id);

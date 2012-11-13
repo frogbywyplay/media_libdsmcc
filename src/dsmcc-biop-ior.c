@@ -56,6 +56,8 @@ static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, unsigned
 {
 	int off = 0;
 
+	(void) data_length; /* TODO check data length */
+
 	loc->carousel_id = dsmcc_getlong(data + off);
 	off += 4;
 	DSMCC_DEBUG("Carousel id = %ld", loc->carousel_id);

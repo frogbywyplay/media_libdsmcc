@@ -69,7 +69,7 @@ void dsmcc_object_carousel_stream_subscribe(struct dsmcc_object_carousel *carous
 		str->assoc_tag = assoc_tag;
 }
 
-struct dsmcc_object_carousel *dsmcc_find_carousel_by_id(struct dsmcc_object_carousel *carousels, int id)
+struct dsmcc_object_carousel *dsmcc_find_carousel_by_id(struct dsmcc_object_carousel *carousels, unsigned int id)
 {
 	while (carousels)
 	{

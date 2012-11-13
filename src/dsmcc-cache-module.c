@@ -140,12 +140,16 @@ static int dsmcc_module_write_block(const char *filename, unsigned int offset, c
 		return 0;
 	}
 
-	if ((wret = write(fd, data, length)) < length)
+	wret = write(fd, data, length);
+	if (wret < 0)
 	{
-		if (wret >= 0)
-			DSMCC_ERROR("Partial write to module data file '%s': %d/%d", filename, wret, length);
-		else
-			DSMCC_ERROR("Write error to module data file '%s': %s", filename, strerror(errno));
+		DSMCC_ERROR("Write error to module data file '%s': %s", filename, strerror(errno));
+		close(fd);
+		return 0;
+	}
+	else if (((unsigned int) wret) < length)
+	{
+		DSMCC_ERROR("Partial write to module data file '%s': %d/%d", filename, wret, length);
 		close(fd);
 		return 0;
 	}
@@ -154,11 +158,13 @@ static int dsmcc_module_write_block(const char *filename, unsigned int offset, c
 	return 1;
 }
 
-void dsmcc_save_cached_module_data(struct dsmcc_state *state, int download_id, struct dsmcc_ddb *ddb, unsigned char *data, int data_length)
+void dsmcc_save_cached_module_data(struct dsmcc_state *state, unsigned int download_id, struct dsmcc_ddb *ddb, unsigned char *data, int data_length)
 {
 	struct dsmcc_cached_module *module = NULL;
 	struct dsmcc_descriptor *desc = NULL;
 	struct dsmcc_object_carousel *car;
+
+	(void) data_length; /* TODO check data length */
 
 	/* Scan through known modules and append data */
 

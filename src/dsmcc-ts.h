@@ -5,7 +5,7 @@
 
 struct dsmcc_tsparser_buffer
 {
-        int           pid;
+        unsigned int  pid;
         int           in_section;
         int           cont;
         unsigned char data[DSMCC_TSPARSER_BUFFER_SIZE];

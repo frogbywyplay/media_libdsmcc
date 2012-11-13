@@ -12,6 +12,7 @@ static int running = 1;
 
 static void sigint_handler(int signal)
 {
+	(void) signal;
 	fprintf(stderr, "sigint\n");
 	running = 0;
 }
@@ -40,6 +41,7 @@ static void logger(int severity, const char *message)
 static int stream_sub_callback(void *arg, unsigned short assoc_tag)
 {
 	/* TODO find PID from assoc_tag using PMT and SDT */
+	(void) assoc_tag;
 	return *((uint16_t *)arg);
 #if 0
 	struct dsmcc_tsparser_buffer **buffers = (struct dsmcc_tsparser_buffer **)arg;
@@ -53,6 +55,9 @@ static int stream_sub_callback(void *arg, unsigned short assoc_tag)
 static int cache_callback(void *arg, unsigned long cid, int reason, char *path, char *fullpath)
 {
 	char *r;
+
+	(void) arg;
+	(void) fullpath;
 
 	switch (reason)
 	{

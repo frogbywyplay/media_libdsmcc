@@ -83,6 +83,8 @@ static void dsmcc_parse_modlink_descriptor(struct dsmcc_descriptor *desc, unsign
 {
 	struct dsmcc_descriptor_modlink *modlink = &desc->data.modlink;
 
+	(void) length; /* TODO check data length */
+
 	desc->type = DSMCC_DESCRIPTOR_MODLINK;
 	modlink->position = data[0];
 	modlink->module_id = (data[1] << 8) | data[2];
@@ -94,6 +96,8 @@ static void dsmcc_parse_crc32_descriptor(struct dsmcc_descriptor *desc, unsigned
 {
 	struct dsmcc_descriptor_crc32 *crc32 = &desc->data.crc32;
 
+	(void) length; /* TODO check data length */
+
 	desc->type = DSMCC_DESCRIPTOR_CRC32;
 	crc32->crc = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
 
@@ -103,6 +107,8 @@ static void dsmcc_parse_crc32_descriptor(struct dsmcc_descriptor *desc, unsigned
 static void dsmcc_parse_location_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
 {
 	struct dsmcc_descriptor_location *location = &desc->data.location;
+
+	(void) length; /* TODO check data length */
 
 	desc->type = DSMCC_DESCRIPTOR_LOCATION;
 	location->location_tag = data[0];
@@ -114,6 +120,8 @@ static void dsmcc_parse_dltime_descriptor(struct dsmcc_descriptor *desc, unsigne
 {
 	struct dsmcc_descriptor_dltime *dltime = &desc->data.dltime;
 
+	(void) length; /* TODO check data length */
+
 	desc->type = DSMCC_DESCRIPTOR_DLTIME;
 	dltime->download_time = (data[0] << 24) | (data[1] << 16) | (data[2] << 8 ) | data[3];
 
@@ -123,6 +131,8 @@ static void dsmcc_parse_dltime_descriptor(struct dsmcc_descriptor *desc, unsigne
 static void dsmcc_parse_grouplink_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
 {
 	struct dsmcc_descriptor_grouplink *grouplink = &desc->data.grouplink;
+
+	(void) length; /* TODO check data length */
 
 	desc->type = DSMCC_DESCRIPTOR_GROUPLINK;
 	grouplink->position = data[0];
@@ -135,6 +145,8 @@ static void dsmcc_parse_compressed_descriptor(struct dsmcc_descriptor *desc, uns
 {
 	struct dsmcc_descriptor_compressed *compressed = &desc->data.compressed;
 
+	(void) length; /* TODO check data length */
+
 	desc->type = DSMCC_DESCRIPTOR_COMPRESSED;
 	compressed->method = data[0];
 	compressed->original_size = (data[1] << 24) | (data[2] << 16) | (data[3] << 8)  | data[4];
@@ -145,6 +157,8 @@ static void dsmcc_parse_compressed_descriptor(struct dsmcc_descriptor *desc, uns
 static void dsmcc_parse_label_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
 {
 	struct dsmcc_descriptor_label *label = &desc->data.label;
+
+	(void) length; /* TODO check data length */
 
 	desc->type = DSMCC_DESCRIPTOR_LABEL;
 	label->text = (char *)malloc(length);
@@ -157,6 +171,8 @@ static void dsmcc_parse_caching_priority_descriptor(struct dsmcc_descriptor *des
 {
 	struct dsmcc_descriptor_caching_priority *caching_priority = &desc->data.caching_priority;
 
+	(void) length; /* TODO check data length */
+
 	desc->type = DSMCC_DESCRIPTOR_CACHING_PRIORITY;
 	caching_priority->priority_value = data[0];
 	caching_priority->transparency_level = data[1];
@@ -167,6 +183,8 @@ static void dsmcc_parse_caching_priority_descriptor(struct dsmcc_descriptor *des
 static void dsmcc_parse_content_type_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
 {
 	struct dsmcc_descriptor_content_type *content_type = &desc->data.content_type;
+
+	(void) length; /* TODO check data length */
 
 	desc->type = DSMCC_DESCRIPTOR_LABEL;
 	content_type->text = (char *)malloc(length);
@@ -180,6 +198,8 @@ static int dsmcc_parse_one_descriptor(struct dsmcc_descriptor **descriptor, unsi
 	int off = 0;
 	struct dsmcc_descriptor *desc;
 	unsigned char tag, length;
+
+	(void) data_length; /* TODO check data length */
 
 	desc = malloc(sizeof(struct dsmcc_descriptor));
 	tag = data[off];

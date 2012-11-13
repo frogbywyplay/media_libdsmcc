@@ -137,7 +137,7 @@ struct dsmcc_tsparser_buffer;
   * \param buffers a pointer to the list of buffers
   * \param pid the PID
   */
-void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, int pid);
+void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, unsigned int pid);
 
 /** \brief Free all the buffers used by the TS Parser
   * \param buffers a pointer to the list of buffers
