@@ -22,6 +22,8 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 /** \defgroup logging Logging
  *  \{
  */
@@ -58,7 +60,7 @@ void dsmcc_set_logger(dsmcc_logger_t *logger, int severity);
   * \param assoc_tag the Association Tag of the requested stream
   * \return the PID of the requested stream
   */
-typedef int (dsmcc_stream_subscribe_callback_t)(void *arg, unsigned short assoc_tag);
+typedef uint16_t (dsmcc_stream_subscribe_callback_t)(void *arg, uint16_t assoc_tag);
 
 /** Opaque type containing the library state */
 struct dsmcc_state;
@@ -76,7 +78,7 @@ struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callba
   * @param data the section data
   * @param data_length the total length of the data buffer
   */
-int dsmcc_parse_section(struct dsmcc_state *state, int pid, unsigned char *data, int data_length);
+int dsmcc_parse_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, int data_length);
 
 /** \brief Free the memory used by the library
   * \param state the library state
@@ -113,16 +115,17 @@ enum
   * \param fullpath the directory/file path on disk
   * \return 0/1 for *_CHECK reasons whether the directory/file should be created or skipped. The return value is not used for *_SAVED reasons.
   */
-typedef int (dsmcc_cache_callback_t)(void *arg, unsigned long cid, int reason, char *path, char *fullpath);
+typedef int (dsmcc_cache_callback_t)(void *arg, uint32_t cid, int reason, char *path, char *fullpath);
 
 /** \brief Add a carousel to the list of carousels to be parsed
   * \param state the library state
   * \param pid the PID of the stream where the carousel DSI message will be broadcasted
+  * \param transaction_id the transaction ID of the carousel DSI message or 0 to use the first DSI message found on the stream
   * \param downloadpath the directory where the carousel files will be downloaded
   * \param cache_callback the callback that will be called before/after each directory or file creation
   * \param cache_callback_arg this will be passed as-is as first argument to the callback
   */
-void dsmcc_add_carousel(struct dsmcc_state *state, int pid, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg);
+void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg);
 
 /** \} */ // end of 'control' group
 
@@ -137,7 +140,7 @@ struct dsmcc_tsparser_buffer;
   * \param buffers a pointer to the list of buffers
   * \param pid the PID
   */
-void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, unsigned int pid);
+void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, uint16_t pid);
 
 /** \brief Free all the buffers used by the TS Parser
   * \param buffers a pointer to the list of buffers
@@ -150,7 +153,7 @@ void dsmcc_tsparser_free_buffers(struct dsmcc_tsparser_buffer **buffers);
   * \param packet the packet data
   * \param packet_length the packet length (should be 188)
   */
-void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparser_buffer **buffers, unsigned char *packet, int packet_length);
+void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparser_buffer **buffers, uint8_t *packet, int packet_length);
 
 /** \brief Call dsmcc_parse_section on all current section buffers.
   * \param state the library state

@@ -11,7 +11,7 @@
 #define DSMCC_TRANSPORT_ERROR	0x80
 #define DSMCC_START_INDICATOR	0x40
 
-void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, unsigned int pid)
+void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, uint16_t pid)
 {
 	struct dsmcc_tsparser_buffer *buf;
 
@@ -46,10 +46,10 @@ void dsmcc_tsparser_free_buffers(struct dsmcc_tsparser_buffer **buffers)
 	*buffers = NULL;
 }
 
-void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparser_buffer **buffers, unsigned char *packet, int packet_length)
+void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparser_buffer **buffers, uint8_t *packet, int packet_length)
 {
 	struct dsmcc_tsparser_buffer *buf;
-	unsigned int pid;
+	uint16_t pid;
 	int cont;
 
 	if (packet_length <= 0 || packet_length != 188)
@@ -66,7 +66,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 
 	if (packet[0] != DSMCC_SYNC_BYTE)
 	{
-		DSMCC_WARN("Skipping packet: Invalid sync byte: got 0x%02x, expected 0x%02x", (int) *packet, (int) DSMCC_SYNC_BYTE);
+		DSMCC_WARN("Skipping packet: Invalid sync byte: got 0x%02hhx, expected 0x%02hhx", *packet, DSMCC_SYNC_BYTE);
 		return;
 	}
 
@@ -87,7 +87,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 	}
 	if (buf == NULL)
 	{
-		DSMCC_WARN("Skipping packet: No buffer found for PID 0x%x", pid);
+		DSMCC_WARN("Skipping packet: No buffer found for PID 0x%hx", pid);
 		return;
 	}
 
@@ -155,7 +155,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 			/* append data to buf */
 			if (buf->in_section + 184 > DSMCC_TSPARSER_BUFFER_SIZE)
 			{
-				DSMCC_ERROR("Section buffer overflow (buffer is already at %d bytes) (table ID is 0x%02x)", buf->in_section, buf->data[0]);
+				DSMCC_ERROR("Section buffer overflow (buffer is already at %d bytes) (table ID is 0x%02hhx)", buf->in_section, buf->data[0]);
 				memcpy(buf->data + buf->in_section, packet + 4, DSMCC_TSPARSER_BUFFER_SIZE - buf->in_section);
 				buf->in_section = DSMCC_TSPARSER_BUFFER_SIZE;
 			}

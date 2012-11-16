@@ -9,17 +9,18 @@
 #include "dsmcc-util.h"
 #include "dsmcc-biop-message.h"
 #include "dsmcc-biop-ior.h"
-#include "dsmcc-cache-module.h"
 #include "dsmcc-cache-file.h"
-#include "dsmcc-descriptor.h"
 
 #define BIOP_MAGIC 0x42494f50
 
-static int dsmcc_biop_parse_msg_header(struct biop_msg_header *header, unsigned char *data, int data_length)
+#define BINDING_TYPE_NOBJECT  0x01
+#define BINDING_TYPE_NCONTEXT 0x02
+
+static int dsmcc_biop_parse_msg_header(struct biop_msg_header *header, uint8_t *data, int data_length)
 {
 	int off = 0;
-	unsigned long magic;
-	unsigned short objinfo_len;
+	uint32_t magic, objkind_len;
+	uint16_t objinfo_len;
 
 	(void) data_length; /* TODO check data length */
 
@@ -56,18 +57,15 @@ static int dsmcc_biop_parse_msg_header(struct biop_msg_header *header, unsigned 
 	DSMCC_DEBUG("ObjKey Len = %d", header->objkey_len);
 	DSMCC_DEBUG("ObjKey = %02x%02x%02x%02x", header->objkey[0], header->objkey[1], header->objkey[2], header->objkey[3]);
 
-	header->objkind_len = dsmcc_getlong(data + off);
+	objkind_len = dsmcc_getlong(data + off);
 	off += 4;
-	if (header->objkind_len > 0)
-	{
-		header->objkind = malloc(header->objkind_len);
-		memcpy(header->objkind, data + off, header->objkind_len);
-	}
+	if (objkind_len > 0)
+		header->objkind = strndup((char *)data + off, objkind_len);
 	else
 		header->objkind = NULL;
-	off += header->objkind_len;
-	DSMCC_DEBUG("ObjKind Len = %ld", header->objkind_len);
-	DSMCC_DEBUG("ObjKind Data = %s", header->objkind);
+	off += objkind_len;
+	DSMCC_DEBUG("ObjKind Len = %ld", objkind_len);
+	DSMCC_DEBUG("ObjKind = %s", header->objkind);
 
 	/* skip object info */
 	objinfo_len = dsmcc_getshort(data + off);
@@ -77,7 +75,7 @@ static int dsmcc_biop_parse_msg_header(struct biop_msg_header *header, unsigned 
 
 	/* adjust message size to exclude header fields */
 	header->message_size -= header->objkey_len + 1;
-	header->message_size -= header->objkind_len + 4;
+	header->message_size -= objkind_len + 4;
 	header->message_size -= objinfo_len + 2;
 
 	return off;
@@ -103,10 +101,10 @@ static void dsmcc_biop_free_msg_header(struct biop_msg_header *header)
 	free(header);
 }
 
-static int dsmcc_biop_parse_name(struct biop_name *name, unsigned char *data, int data_length)
+static int dsmcc_biop_parse_name(struct biop_name *name, uint8_t *data, int data_length)
 {
 	int off = 0;
-	unsigned char comp_count;
+	uint8_t comp_count, len;
 
 	(void) data_length; /* TODO check data length */
 
@@ -120,30 +118,24 @@ static int dsmcc_biop_parse_name(struct biop_name *name, unsigned char *data, in
 
 	/* only one name component to parse */
 
-	name->id_len = data[off];
+	len = data[off];
 	off++;
-	if (name->id_len > 0)
-	{
-		name->id = (char *) malloc(name->id_len);
-		memcpy(name->id, data + off, name->id_len);
-	}
+	if (len > 0)
+		name->id = strndup((char *)data + off, len);
 	else
 		name->id = NULL;
-	off += name->id_len;
-	DSMCC_DEBUG("Id Len = %d", name->id_len);
+	off += len;
+	DSMCC_DEBUG("Id Len = %d", len);
 	DSMCC_DEBUG("Id = %s", name->id);
 
-	name->kind_len = data[off];
+	len = data[off];
 	off++;
-	if (name->kind_len > 0)
-	{
-		name->kind = (char *) malloc(name->kind_len);
-		memcpy(name->kind, data + off, name->kind_len);
-	}
+	if (len > 0)
+		name->kind = strndup((char *)data + off, len);
 	else
 		name->kind = NULL;
-	off += name->kind_len;
-	DSMCC_DEBUG("Kind Len = %d", name->kind_len);
+	off += len;
+	DSMCC_DEBUG("Kind Len = %d", len);
 	DSMCC_DEBUG("Kind = %s", name->kind);
 
 	return off;
@@ -165,16 +157,15 @@ static void dsmcc_biop_free_binding(struct biop_binding *binding)
 	free(binding);
 }
 
-static int dsmcc_biop_parse_binding(struct biop_binding *bind, unsigned char *data, int data_length)
+static int dsmcc_biop_parse_binding(struct biop_binding *bind, uint8_t *data, int data_length)
 {
 	int off = 0, ret;
-	unsigned short objinfo_len;
+	uint16_t objinfo_len;
 
 	bind->name = malloc(sizeof(struct biop_name));
 	ret = dsmcc_biop_parse_name(bind->name, data, data_length);
 	if (ret < 0)
 	{
-		DSMCC_ERROR("dsmcc_biop_parse_name returned %d", ret);
 		dsmcc_biop_free_name(bind->name);
 		bind->name = NULL;
 		return -1;
@@ -185,12 +176,10 @@ static int dsmcc_biop_parse_binding(struct biop_binding *bind, unsigned char *da
 	off++;
 	DSMCC_DEBUG("Binding Type = %d", bind->binding_type);
 
-	bind->ior = malloc(sizeof(struct biop_ior));
-	memset(bind->ior, 0, sizeof(struct biop_ior));
+	bind->ior = calloc(1, sizeof(struct biop_ior));
 	ret = dsmcc_biop_parse_ior(bind->ior, data + off, data_length - off);
 	if (ret < 0)
 	{
-		DSMCC_ERROR("dsmcc_biop_parse_ior returned %d", ret);
 		dsmcc_biop_free_ior(bind->ior);
 		bind->ior = NULL;
 		return -1;
@@ -206,10 +195,10 @@ static int dsmcc_biop_parse_binding(struct biop_binding *bind, unsigned char *da
 	return off;
 }
 
-static int dsmcc_biop_skip_service_context_list(unsigned char *data, int data_length)
+static int dsmcc_biop_skip_service_context_list(uint8_t *data, int data_length)
 {
 	int off = 0, i;
-	unsigned char serviceContextList_count;
+	uint8_t serviceContextList_count;
 
 	(void) data_length; /* TODO check data length */
 
@@ -221,7 +210,7 @@ static int dsmcc_biop_skip_service_context_list(unsigned char *data, int data_le
 		DSMCC_DEBUG("Skipping %d service contexts", serviceContextList_count);
 		for (i = 0; i < serviceContextList_count; i++)
 		{
-			unsigned short context_data_length;
+			uint16_t context_data_length;
 
 			// skip context_id
 			off += 4;
@@ -237,14 +226,14 @@ static int dsmcc_biop_skip_service_context_list(unsigned char *data, int data_le
 	return off;
 }
 
-static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, unsigned short module_id, int objkey_len, unsigned char *objkey, unsigned char *data, int data_length)
+static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, uint16_t module_id, uint8_t objkey_len, uint8_t *objkey, uint8_t *data, int data_length)
 {
-	unsigned int i;
+	int i;
 	int off = 0, ret;
-	unsigned long msgbody_len;
-	unsigned int bindings_count;
+	uint32_t msgbody_len;
+	uint16_t bindings_count;
 
-	/* skip service context count */
+	/* skip service context list */
 	ret = dsmcc_biop_skip_service_context_list(data, data_length);
 	off += ret;
 
@@ -262,7 +251,6 @@ static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, unsigned sho
 		ret = dsmcc_biop_parse_binding(binding, data + off, data_length - off);
 		if (ret < 0)
 		{
-			DSMCC_ERROR("dsmcc_biop_parse_binding returned %d", ret);
 			dsmcc_biop_free_binding(binding);
 			return -1;
 		}
@@ -270,11 +258,23 @@ static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, unsigned sho
 
 		if (!strcmp("dir", binding->name->kind))
 		{
+			if (binding->binding_type != BINDING_TYPE_NCONTEXT)
+			{
+				DSMCC_ERROR("Invalid binding type for Directory (got %d but expected %d)", binding->binding_type, BINDING_TYPE_NCONTEXT);
+				dsmcc_biop_free_binding(binding);
+				return -1;
+			}
 			DSMCC_DEBUG("Caching info for directory '%s'", binding->name->id);
 			dsmcc_filecache_cache_dir_info(filecache, module_id, objkey_len, objkey, binding);
 		}
-		else if(!strcmp("fil", binding->name->kind))
+		else if (!strcmp("fil", binding->name->kind))
 		{
+			if (binding->binding_type != BINDING_TYPE_NOBJECT)
+			{
+				DSMCC_ERROR("Invalid binding type for File (got %d but expected %d)", binding->binding_type, BINDING_TYPE_NOBJECT);
+				dsmcc_biop_free_binding(binding);
+				return -1;
+			}
 			DSMCC_DEBUG("Caching info for file '%s'", binding->name->id);
 			dsmcc_filecache_cache_file_info(filecache, module_id, objkey_len, objkey, binding);
 		}
@@ -287,13 +287,13 @@ static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, unsigned sho
 	return off;
 }
 
-static int dsmcc_biop_parse_file(struct dsmcc_file_cache *filecache, int objkey_len, unsigned char *objkey, struct dsmcc_cached_module *module, unsigned int module_offset, unsigned char *data, int data_length)
+static int dsmcc_biop_parse_file(struct dsmcc_file_cache *filecache, uint16_t module_id, uint8_t objkey_len, uint8_t *objkey, const char *module_file, int module_offset, uint8_t *data, int data_length)
 {
 	int off = 0, ret;
-	unsigned long msgbody_len;
-	unsigned long content_len;
+	uint32_t msgbody_len;
+	uint32_t content_len;
 
-	/* skip service context count */
+	/* skip service context list */
 	ret = dsmcc_biop_skip_service_context_list(data, data_length);
 	off += ret;
 
@@ -305,16 +305,16 @@ static int dsmcc_biop_parse_file(struct dsmcc_file_cache *filecache, int objkey_
 	off += 4;
 	DSMCC_DEBUG("Content Len = %ld", content_len);
 
-	dsmcc_filecache_cache_file(filecache, objkey_len, objkey, content_len, module, module_offset + off);
+	dsmcc_filecache_cache_file(filecache, module_id, objkey_len, objkey, module_file, module_offset + off, content_len);
 	off += content_len;
 
 	return off;
 }
 
-static unsigned char *dsmcc_biop_mmap_data(const char *filename, unsigned int size)
+static uint8_t *dsmcc_biop_mmap_data(const char *filename, int size)
 {
 	int fd;
-	unsigned char *data;
+	uint8_t *data;
 
 	fd = open(filename, O_RDONLY);
 	if (fd < 0)
@@ -335,22 +335,14 @@ static unsigned char *dsmcc_biop_mmap_data(const char *filename, unsigned int si
 	return data;
 }
 
-int dsmcc_biop_parse_data(struct dsmcc_file_cache *filecache, struct dsmcc_cached_module *module)
+int dsmcc_biop_parse_data(struct dsmcc_file_cache *filecache, uint16_t module_id, const char *module_file, int length)
 {
-	struct dsmcc_descriptor *desc;
-	int ret;
-	unsigned int off, length;
-	unsigned char *data;
+	int ret, off;
+	uint8_t *data;
 
-	desc = dsmcc_find_descriptor_by_type(module->descriptors, DSMCC_DESCRIPTOR_COMPRESSED);
-	if (desc)
-		length = desc->data.compressed.original_size;
-	else
-		length = module->total_size;
+	DSMCC_DEBUG("Data size = %d", length);
 
-	DSMCC_DEBUG("Module size (uncompressed) = %d", length);
-
-	data = dsmcc_biop_mmap_data(module->data_file, length);
+	data = dsmcc_biop_mmap_data(module_file, length);
 	if (!data)
 		return -1;
 
@@ -363,12 +355,10 @@ int dsmcc_biop_parse_data(struct dsmcc_file_cache *filecache, struct dsmcc_cache
 
 		/* Parse header */
 		DSMCC_DEBUG("Parsing message header");
-		header = malloc(sizeof(struct biop_msg_header));
-		memset(header, 0, sizeof(struct biop_msg_header));
+		header = calloc(1, sizeof(struct biop_msg_header));
 		ret = dsmcc_biop_parse_msg_header(header, data + off, length - off);
 		if (ret < 0)
 		{
-			DSMCC_ERROR("dsmcc_biop_parse_msg_header returned %d, dropping rest of module", ret);
 			dsmcc_biop_free_msg_header(header);
 			off = -1;
 			break;
@@ -376,20 +366,20 @@ int dsmcc_biop_parse_data(struct dsmcc_file_cache *filecache, struct dsmcc_cache
 		off += ret;
 
 		/* Handle each message type */
-		if (strcmp((const char *) header->objkind, "fil") == 0)
+		if (strcmp(header->objkind, "fil") == 0)
 		{
 			DSMCC_DEBUG("Parsing file message");
-			ret = dsmcc_biop_parse_file(filecache, header->objkey_len, header->objkey, module, off, data + off, length - off);
+			ret = dsmcc_biop_parse_file(filecache, module_id, header->objkey_len, header->objkey, module_file, off, data + off, length - off);
 		}
-		else if(strcmp((const char *) header->objkind, "dir") == 0)
+		else if (strcmp(header->objkind, "dir") == 0)
 		{
 			DSMCC_DEBUG("Parsing directory message");
-			ret = dsmcc_biop_parse_dir(filecache, module->module_id, header->objkey_len, header->objkey, data + off, length - off);
+			ret = dsmcc_biop_parse_dir(filecache, module_id, header->objkey_len, header->objkey, data + off, length - off);
 		}
-		else if(strcmp((const char *) header->objkind, "srg") == 0)
+		else if (strcmp(header->objkind, "srg") == 0)
 		{
 			DSMCC_DEBUG("Parsing gateway message");
-			ret = dsmcc_biop_parse_dir(filecache, 0, 0, NULL, data + off, length - off);
+			ret = dsmcc_biop_parse_dir(filecache, module_id, 0, NULL, data + off, length - off);
 		}
 		else
 			DSMCC_WARN("Don't known of to handle unknown object (kind \"%s\")", header->objkind);

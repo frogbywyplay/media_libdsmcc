@@ -1,6 +1,8 @@
 #ifndef DSMCC_DESCRIPTOR_H
 #define DSMCC_DESCRIPTOR_H
 
+#include <stdint.h>
+
 struct dsmcc_descriptor_type
 {
 	char *text;
@@ -13,41 +15,41 @@ struct dsmcc_descriptor_name
 
 struct dsmcc_descriptor_info
 {
-	char lang_code[3];
+	char  lang_code[3];
 	char *text;
 };
 
 struct dsmcc_descriptor_modlink
 {
-	char position;
-	unsigned short module_id;
+	char     position;
+	uint16_t module_id;
 };
 
 struct dsmcc_descriptor_crc32
 {
-	unsigned long crc;
+	uint32_t crc;
 };
 
 struct dsmcc_descriptor_location
 {
-	char location_tag;
+	uint8_t location_tag;
 };
 
 struct dsmcc_descriptor_dltime
 {
-	unsigned long download_time;
+	uint32_t download_time;
 };
 
 struct dsmcc_descriptor_grouplink
 {
-	char position;
-	unsigned long group_id;
+	uint8_t  position;
+	uint32_t group_id;
 };
 
 struct dsmcc_descriptor_compressed
 {
-	char method;
-	unsigned long original_size;
+	uint8_t  method;
+	uint32_t original_size;
 };
 
 struct dsmcc_descriptor_label
@@ -57,8 +59,8 @@ struct dsmcc_descriptor_label
 
 struct dsmcc_descriptor_caching_priority
 {
-	unsigned char priority_value;
-	unsigned char transparency_level;
+	uint8_t priority_value;
+	uint8_t transparency_level;
 };
 
 struct dsmcc_descriptor_content_type
@@ -104,7 +106,7 @@ struct dsmcc_descriptor
 	struct dsmcc_descriptor *next;
 };
 
-int dsmcc_parse_descriptors(struct dsmcc_descriptor **descriptors, unsigned char *data, int data_length);
+int dsmcc_parse_descriptors(struct dsmcc_descriptor **descriptors, uint8_t *data, int data_length);
 struct dsmcc_descriptor *dsmcc_find_descriptor_by_type(struct dsmcc_descriptor *descriptors, int type);
 void dsmcc_descriptors_free_all(struct dsmcc_descriptor *descriptors);
 

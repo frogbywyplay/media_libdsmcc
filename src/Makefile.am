@@ -29,5 +29,6 @@ noinst_HEADERS = \
 	dsmcc-util.h
 
 AM_CFLAGS = \
+	-Werror \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src

@@ -1,27 +1,20 @@
 #ifndef DSMCC_BIOP_MESSAGE_H
 #define DSMCC_BIOP_MESSAGE_H
 
-#include "dsmcc-descriptor.h"
 #include "dsmcc-biop-ior.h"
 
 /* from dsmcc-cache-file.h */
 struct dsmcc_file_cache;
 
-/* from dsmcc-cache-module.h */
-struct dsmcc_cached_module;
-
 struct biop_name
 {
-	unsigned char id_len;
-	char         *id;
-
-	unsigned char kind_len;
-	char         *kind;
+	char    *id;
+	char    *kind;
 };
 
 struct biop_binding
 {
-	char binding_type;
+	uint8_t binding_type;
 
 	struct biop_name *name;
 	struct biop_ior  *ior;
@@ -29,17 +22,15 @@ struct biop_binding
 
 struct biop_msg_header
 {
-	unsigned char version_major;
-	unsigned char version_minor;
-	unsigned int  message_size;
+	uint8_t   version_major;
+	uint8_t   version_minor;
+	uint32_t  message_size;
 
-	unsigned char objkey_len;
-	unsigned char*objkey;
-
-	unsigned long  objkind_len;
-	unsigned char *objkind;
+	uint8_t   objkey_len;
+	uint8_t  *objkey;
+	char     *objkind;
 };
 
-int dsmcc_biop_parse_data(struct dsmcc_file_cache *cache, struct dsmcc_cached_module *module);
+int dsmcc_biop_parse_data(struct dsmcc_file_cache *cache, uint16_t module_id, const char *module_file, int length);
 
 #endif

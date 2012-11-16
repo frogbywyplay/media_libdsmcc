@@ -13,16 +13,15 @@
 #define TAG_ObjectLocation 0x49534F50
 #define TAG_ConnBinder     0x49534F40
 
-static int dsmcc_biop_parse_dsm_conn_binder(struct biop_dsm_conn_binder *binder, unsigned char *data, int data_length)
+static int dsmcc_biop_parse_dsm_conn_binder(struct biop_dsm_conn_binder *binder, uint8_t *data, int data_length)
 {
 	int off = 0, ret;
 	struct biop_tap *tap;
-	unsigned short selector_type;
+	uint16_t selector_type;
 
 	ret = dsmcc_biop_parse_taps_keep_only_first(&tap, BIOP_DELIVERY_PARA_USE, data, data_length);
 	if (ret < 0)
 	{
-		DSMCC_ERROR("dsmcc_biop_parse_taps_return_first returned %d", ret);
 		dsmcc_biop_free_tap(tap);
 		return -1;
 	}
@@ -30,7 +29,7 @@ static int dsmcc_biop_parse_dsm_conn_binder(struct biop_dsm_conn_binder *binder,
 
 	if (tap->selector_length != 0x0a)
 	{
-		DSMCC_ERROR("Invalid selector length while parsing BIOP_DELIVERY_PARA_USE tap (got %d but expected %d)", tap->selector_length, 0x0a);
+		DSMCC_ERROR("Invalid selector length while parsing BIOP_DELIVERY_PARA_USE tap (got 0x%hhx but expected 0x0a)", tap->selector_length);
 		dsmcc_biop_free_tap(tap);
 		return -1;
 	}
@@ -38,12 +37,12 @@ static int dsmcc_biop_parse_dsm_conn_binder(struct biop_dsm_conn_binder *binder,
 	selector_type = dsmcc_getshort(tap->selector_data);
 	if (selector_type != 0x01)
 	{
-		DSMCC_ERROR("Invalid selector type while parsing BIOP_DELIVERY_PARA_USE tap (got %d but expected %d)", selector_type, 0x01);
+		DSMCC_ERROR("Invalid selector type while parsing BIOP_DELIVERY_PARA_USE tap (got 0x%hx but expected 0x01)", selector_type);
 		dsmcc_biop_free_tap(tap);
 		return -1;
 	}
 
-	binder->transactionId = dsmcc_getlong(tap->selector_data + 2);
+	binder->transaction_id = dsmcc_getlong(tap->selector_data + 2);
 	binder->timeout = dsmcc_getlong(tap->selector_data + 6);
 	binder->assoc_tag = tap->assoc_tag;
 
@@ -52,9 +51,10 @@ static int dsmcc_biop_parse_dsm_conn_binder(struct biop_dsm_conn_binder *binder,
 	return off;
 }
 
-static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, unsigned char *data, int data_length)
+static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, uint8_t *data, int data_length)
 {
 	int off = 0;
+	uint8_t version_major, version_minor;
 
 	(void) data_length; /* TODO check data length */
 
@@ -66,9 +66,13 @@ static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, unsigned
 	off += 2;
 	DSMCC_DEBUG("Module id = %d", loc->module_id);
 
-	loc->version_major = data[off++];
-	loc->version_minor = data[off++];
-	DSMCC_DEBUG("Version = 0x%x%02x", loc->version_major, loc->version_minor);
+	version_major = data[off++];
+	version_minor = data[off++];
+	if (version_major != 0x01 || version_minor != 0x00)
+	{
+		DSMCC_ERROR("Invalid version in BIOP::ObjectLocation (got 0x%hhx%02hhx but expected 0x100", version_major, version_minor);
+		return -1;
+	}
 
 	loc->objkey_len = data[off++]; /* <= 4 */
 	if (loc->objkey_len > 0)
@@ -79,17 +83,17 @@ static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, unsigned
 	else
 		loc->objkey = NULL;
 	off += loc->objkey_len;
-	DSMCC_DEBUG("Key Length = %d", loc->objkey_len);
+	DSMCC_DEBUG("Key Length = %hhd", loc->objkey_len);
 
 	return off;
 }
 
-static int dsmcc_biop_parse_body(struct biop_profile_body *body, unsigned char *data, int data_length)
+static int dsmcc_biop_parse_body(struct biop_profile_body *body, uint8_t *data, int data_length)
 {
 	int off = 0, ret, i;
-	unsigned char lite_components_count;
-	unsigned long component_tag;
-	unsigned char component_data_len;
+	uint8_t lite_components_count;
+	uint32_t component_tag;
+	uint8_t component_data_len;
 
 	/* skip byte order */
 	off++;
@@ -98,7 +102,7 @@ static int dsmcc_biop_parse_body(struct biop_profile_body *body, unsigned char *
 	off++;
 	if (lite_components_count < 2)
 	{
-		DSMCC_ERROR("Invalid number of components in BIOPProfileBody (got %d but expected at least %d)", lite_components_count, 2);
+		DSMCC_ERROR("Invalid number of components in BIOPProfileBody (got %hhd but expected at least 2)", lite_components_count);
 		return -1;
 	}
 	DSMCC_DEBUG("Lite Components Count %d", lite_components_count);
@@ -116,37 +120,31 @@ static int dsmcc_biop_parse_body(struct biop_profile_body *body, unsigned char *
 			/* First component should be a BIOP::ObjectLocation */
 			if (component_tag != TAG_ObjectLocation)
 			{
-				DSMCC_ERROR("Invalid component ID tag while parsing BIOP::ObjectLocation (got 0x%lx but expected 0x%lx)", component_tag, TAG_ObjectLocation);
+				DSMCC_ERROR("Invalid component ID tag while parsing BIOP::ObjectLocation (got 0x%08x but expected 0x%08x)", component_tag, TAG_ObjectLocation);
 				return -1;
 			}
 
 			ret = dsmcc_biop_parse_obj_location(&body->obj_loc, data + off, data_length - off);
 			if (ret < 0)
-			{
-				DSMCC_ERROR("dsmcc_biop_parse_object returned %d", ret);
 				return -1;
-			}
 		}
 		else if (i == 1)
 		{
 			/* Second component should be a DSM::ConnBinder */
 			if (component_tag != TAG_ConnBinder)
 			{
-				DSMCC_ERROR("Invalid component ID tag while parsing DSM::ConnBinder (got 0x%lx but expected 0x%lx)", component_tag, TAG_ConnBinder);
+				DSMCC_ERROR("Invalid component ID tag while parsing DSM::ConnBinder (got 0x%08x but expected 0x%08x)", component_tag, TAG_ConnBinder);
 				return -1;
 			}
 
 			ret = dsmcc_biop_parse_dsm_conn_binder(&body->conn_binder, data + off, data_length - off);
 			if (ret < 0)
-			{
-				DSMCC_ERROR("dsmcc_biop_parse_binder returned %d", ret);
 				return -1;
-			}
 		}
 		else
 		{
 			/* ignore remaining components */
-			DSMCC_WARN("Ignoring unknown component %d with ID tag 0x%lx", i, component_tag);
+			DSMCC_WARN("Ignoring unknown component %d with ID tag 0x%08x", i, component_tag);
 		}
 
 		off += component_data_len;
@@ -175,11 +173,11 @@ const char *dsmcc_biop_get_ior_type_str(int type)
 }
 
 /* TODO check data_length */
-int dsmcc_biop_parse_ior(struct biop_ior *ior, unsigned char *data, int data_length)
+int dsmcc_biop_parse_ior(struct biop_ior *ior, uint8_t *data, int data_length)
 {
 	int off = 0, ret, found;
 	unsigned int i;
-	unsigned long type_id_len, tagged_profiles_count;
+	uint32_t type_id_len, tagged_profiles_count;
 	char *type_id;
 
 	type_id_len = dsmcc_getlong(data);
@@ -206,26 +204,26 @@ int dsmcc_biop_parse_ior(struct biop_ior *ior, unsigned char *data, int data_len
 		ior->type = IOR_TYPE_DSM_STREAM_EVENT;
 	else
 	{
-		DSMCC_ERROR("IOR with unknown type_id of length %ld", type_id_len);
+		DSMCC_ERROR("IOR with unknown type_id of length %d", type_id_len);
 		return -1;
 	}
 
 	tagged_profiles_count = dsmcc_getlong(data + off);
 	off += 4;
-	DSMCC_DEBUG("Tagged Profiles Count = %ld", tagged_profiles_count);
+	DSMCC_DEBUG("Tagged Profiles Count = %d", tagged_profiles_count);
 
 	found = 0;
 	for (i = 0; i < tagged_profiles_count; i++)
 	{
-		unsigned long profile_id_tag, profile_data_length;
+		uint32_t profile_id_tag, profile_data_length;
 
 		profile_id_tag = dsmcc_getlong(data + off);
 		off += 4;
-		DSMCC_DEBUG("Profile Id Tag = %lx", profile_id_tag);
+		DSMCC_DEBUG("Profile Id Tag = %08x", profile_id_tag);
 
 		profile_data_length = dsmcc_getlong(data + off);
 		off += 4;
-		DSMCC_DEBUG("Profile Data Length = %ld", profile_data_length);
+		DSMCC_DEBUG("Profile Data Length = %d", profile_data_length);
 
 		if (profile_id_tag == TAG_BIOP)
 		{
@@ -233,17 +231,14 @@ int dsmcc_biop_parse_ior(struct biop_ior *ior, unsigned char *data, int data_len
 			{
 				ret = dsmcc_biop_parse_body(&ior->profile_body, data + off, data_length - off);
 				if (ret < 0)
-				{
-					DSMCC_ERROR("dsmcc_biop_parse_body returned %d", ret);
 					return -1;
-				}
 				found = 1;
 			}
 			else
 				DSMCC_WARN("Already got a BIOPProfileBody, skipping profile %d", i);
 		}
 		else
-			DSMCC_WARN("Skipping Unknown Profile %d Id Tag %lx Size %d", i, profile_id_tag, profile_data_length);
+			DSMCC_WARN("Skipping Unknown Profile %d Id Tag %08x Size %d", i, profile_id_tag, profile_data_length);
 
 		off += profile_data_length;
 	}

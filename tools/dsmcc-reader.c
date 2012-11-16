@@ -38,7 +38,7 @@ static void logger(int severity, const char *message)
 	fprintf(stderr, "[dsmcc]%s %s\n", sev, message);
 }
 
-static int stream_sub_callback(void *arg, unsigned short assoc_tag)
+static uint16_t stream_sub_callback(void *arg, uint16_t assoc_tag)
 {
 	/* TODO find PID from assoc_tag using PMT and SDT */
 	(void) assoc_tag;
@@ -52,7 +52,7 @@ static int stream_sub_callback(void *arg, unsigned short assoc_tag)
 #endif
 }
 
-static int cache_callback(void *arg, unsigned long cid, int reason, char *path, char *fullpath)
+static int cache_callback(void *arg, uint32_t cid, int reason, char *path, char *fullpath)
 {
 	char *r;
 
@@ -76,7 +76,7 @@ static int cache_callback(void *arg, unsigned long cid, int reason, char *path, 
 		default:
 			r = "UNKNOWN";
 	}
-	fprintf(stderr, "[main] Cache callback for %ld:%s (%s)\n", cid, path, r);
+	fprintf(stderr, "[main] Cache callback for %d:%s (%s)\n", cid, path, r);
 
 	return 1;
 };
@@ -147,7 +147,7 @@ int main(int argc, char **argv)
 
 		dsmcc_tsparser_add_pid(&buffers, pid);
 
-		dsmcc_add_carousel(state, pid, downloadpath, cache_callback, NULL);
+		dsmcc_add_carousel(state, pid, 0, downloadpath, cache_callback, NULL);
 
 		status = parse_stream(ts, state, &buffers);
 
