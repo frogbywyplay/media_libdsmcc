@@ -8,7 +8,6 @@ struct dsmcc_object_carousel;
 
 /* from dsmcc-biop-message.h */
 struct biop_binding;
-struct biop_message;
 
 struct dsmcc_file_cache;
 

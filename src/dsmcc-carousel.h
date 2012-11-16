@@ -3,15 +3,6 @@
 
 #include <stdint.h>
 
-/* from dsmcc.h */
-struct dsmcc_stream;
-
-/* from dsmcc-filecache.h */
-struct cache;
-
-/* from dsmcc-cache.h */
-struct dsmcc_cached_module;
-
 struct dsmcc_object_carousel
 {
 	uint32_t cid;

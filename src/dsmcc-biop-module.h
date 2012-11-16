@@ -4,9 +4,6 @@
 #include <stdint.h>
 #include "dsmcc-biop-ior.h"
 
-/* from dsmcc-descriptor.h */
-struct dsmcc_descriptor;
-
 struct biop_module_info
 {
 	uint32_t mod_timeout;
