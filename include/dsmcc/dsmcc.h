@@ -66,17 +66,18 @@ typedef uint16_t (dsmcc_stream_subscribe_callback_t)(void *arg, uint16_t assoc_t
 struct dsmcc_state;
 
 /** \brief Initialize the DSM-CC parser
-  * @param tmpdir the temporary directory that will be used. Will be created if not already existent. If NULL, it will default to /tmp/dsmcc-XYZ (where XYZ is the PID of the current process)
-  * @param stream_sub_callback the callback that will be called when the library needs to subscribe to new streams
-  * @param stream_sub_callback_arg this will be passed as-is as first argument to the callback
+  * \param tmpdir the temporary directory that will be used. Will be created if not already existent. If NULL, it will default to /tmp/dsmcc-XYZ (where XYZ is the PID of the current process)
+  * \param stream_sub_callback the callback that will be called when the library needs to subscribe to new streams
+  * \param stream_sub_callback_arg this will be passed as-is as first argument to the callback
   */
 struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callback_t *stream_sub_callback, void *stream_sub_callback_arg);
 
 /** \brief Parse a MPEG Section
-  * @param state the library state
-  * @param pid the PID of the stream from which the section originates
-  * @param data the section data
-  * @param data_length the total length of the data buffer
+  * \param state the library state
+  * \param pid the PID of the stream from which the section originates
+  * \param data the section data
+  * \param data_length the total length of the data buffer
+  * \return 1 if no error occured, 0 otherwise
   */
 int dsmcc_parse_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, int data_length);
 
