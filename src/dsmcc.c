@@ -70,8 +70,9 @@ void dsmcc_stream_add_assoc_tag(struct dsmcc_stream *stream, uint16_t assoc_tag)
 		if (stream->assoc_tags[i] == assoc_tag)
 			return;
 
+	stream->assoc_tag_count++;
 	stream->assoc_tags = realloc(stream->assoc_tags, stream->assoc_tag_count * sizeof(*stream->assoc_tags));
-	stream->assoc_tags[stream->assoc_tag_count++] = assoc_tag;
+	stream->assoc_tags[stream->assoc_tag_count - 1] = assoc_tag;
 
 	DSMCC_DEBUG("Added assoc_tag 0x%hx to stream with pid 0x%hx", assoc_tag, stream->pid);
 }
@@ -148,13 +149,26 @@ struct dsmcc_queue_entry *dsmcc_stream_find_queue_entry(struct dsmcc_stream *str
 	return entry;
 }
 
+static void dsmcc_free_queue_entries(struct dsmcc_queue_entry *entry)
+{
+	while (entry)
+	{
+		struct dsmcc_queue_entry *next = entry->next;
+		free(entry);
+		entry = next;
+	}
+}
+
 static void dsmcc_free_streams(struct dsmcc_stream *stream)
 {
 	while (stream)
 	{
-		struct dsmcc_stream *strnext = stream->next;
+		struct dsmcc_stream *next = stream->next;
+		if (stream->assoc_tags)
+			free(stream->assoc_tags);
+		dsmcc_free_queue_entries(stream->queue);
 		free(stream);
-		stream = strnext;
+		stream = next;
 	}
 }
 
@@ -173,3 +187,4 @@ void dsmcc_close(struct dsmcc_state *state)
 
 	free(state);
 }
+
