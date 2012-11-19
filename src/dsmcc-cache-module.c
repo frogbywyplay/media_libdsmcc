@@ -38,6 +38,49 @@ struct dsmcc_cached_module
 	struct dsmcc_cached_module *next, *prev;
 };
 
+static void dsmcc_cached_module_free(struct dsmcc_object_carousel *carousel, struct dsmcc_cached_module *module)
+{
+	if (module->bstatus)
+	{
+		free(module->bstatus);
+		module->bstatus = NULL;
+	}
+
+	if (module->descriptors)
+	{
+		dsmcc_descriptors_free_all(module->descriptors);
+		module->descriptors = NULL;
+	}
+
+	if (module->data_file)
+	{
+		unlink(module->data_file);
+		free(module->data_file);
+		module->data_file = NULL;
+	}
+	
+	if (module->prev)
+	{
+		module->prev->next = module->next;
+		if (module->next)
+			module->next->prev = module->prev;
+	}
+	else
+	{
+		carousel->modules = module->next;
+		if (module->next)
+			module->next->prev = NULL;
+	}
+
+	free(module);
+}
+
+void dsmcc_cached_module_free_all(struct dsmcc_object_carousel *carousel)
+{
+	while (carousel->modules)
+		dsmcc_cached_module_free(carousel, carousel->modules);
+}
+
 static void dsmcc_process_cached_module(struct dsmcc_object_carousel *carousel, struct dsmcc_cached_module *module)
 {
 	struct dsmcc_descriptor *desc = NULL;
@@ -93,7 +136,7 @@ void dsmcc_add_cached_module_info(struct dsmcc_state *state, struct dsmcc_object
 			{
 				/* New version, drop old data */
 				DSMCC_DEBUG("Updating Module %hu Version %hhu -> %hhu", dmi->module_id, module->version, dmi->module_version);
-				dsmcc_free_cached_module(carousel, module);
+				dsmcc_cached_module_free(carousel, module);
 				break;
 			}
 		}
@@ -135,43 +178,6 @@ void dsmcc_add_cached_module_info(struct dsmcc_state *state, struct dsmcc_object
 	/* Steal the descriptors */
 	module->descriptors = bmi->descriptors;
 	bmi->descriptors = NULL;
-}
-
-void dsmcc_free_cached_module(struct dsmcc_object_carousel *carousel, struct dsmcc_cached_module *module)
-{
-	if (module->bstatus)
-	{
-		free(module->bstatus);
-		module->bstatus = NULL;
-	}
-
-	if (module->descriptors)
-	{
-		dsmcc_descriptors_free_all(module->descriptors);
-		module->descriptors = NULL;
-	}
-
-	if (module->data_file)
-	{
-		unlink(module->data_file);
-		free(module->data_file);
-		module->data_file = NULL;
-	}
-	
-	if (module->prev)
-	{
-		module->prev->next = module->next;
-		if (module->next)
-			module->next->prev = module->prev;
-	}
-	else
-	{
-		carousel->modules = module->next;
-		if (module->next)
-			module->next->prev = NULL;
-	}
-
-	free(module);
 }
 
 static int dsmcc_module_write_block(const char *filename, unsigned int offset, uint8_t *data, unsigned int length)

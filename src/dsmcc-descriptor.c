@@ -45,216 +45,240 @@ void dsmcc_descriptors_free_all(struct dsmcc_descriptor *descriptors)
 	}
 }
 
-static void dsmcc_parse_type_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_type_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_type *type = &desc->data.type;
 
 	desc->type = DSMCC_DESCRIPTOR_TYPE;
-	type->text = malloc(length);
-	memcpy(type->text, data, length);
+	if (!dsmcc_strdup(&type->text, length, data, 0, length))
+		return -1;
 
 	DSMCC_DEBUG("Type descriptor, text='%s'", type->text);
+	return length;
 }
 
-static void dsmcc_parse_name_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_name_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_name *name = &desc->data.name;
 
 	desc->type = DSMCC_DESCRIPTOR_NAME;
-	name->text = malloc(length);
-	memcpy(name->text, data, length);
+	if (!dsmcc_strdup(&name->text, length, data, 0, length))
+		return -1;
 
 	DSMCC_DEBUG("Name descriptor, text='%s'", name->text);
+	return length;
 }
 
-static void dsmcc_parse_info_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_info_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_info *info = &desc->data.info;
 
 	desc->type = DSMCC_DESCRIPTOR_INFO;
-	memcpy(info->lang_code, data, 3);
-	info->text = malloc(length - 3);
-	memcpy(info->text, data + 3, length - 3);
+	if (!dsmcc_strdup(&info->lang_code, 3, data, 0, length))
+		return -1;
+	if (!dsmcc_strdup(&info->text, length - 3, data, 3, length))
+	{
+		free(info->lang_code);
+		return -1;
+	}
 
 	DSMCC_DEBUG("Info descriptor, lang_code='%s' text='%s'", info->lang_code, info->text);
+	return length;
 }
 
-static void dsmcc_parse_modlink_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_modlink_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_modlink *modlink = &desc->data.modlink;
 
-	(void) length; /* TODO check data length */
-
 	desc->type = DSMCC_DESCRIPTOR_MODLINK;
-	modlink->position = data[0];
-	modlink->module_id = dsmcc_getshort(data + 1);
+	if (!dsmcc_getbyte(&modlink->position, data, 0, length))
+		return -1;
+	if (!dsmcc_getshort(&modlink->module_id, data, 1, length))
+		return -1;
 
 	DSMCC_DEBUG("Modlink descriptor, position=%d module_id=%d", modlink->position, modlink->module_id);
+	return 3;
 }
 
-static void dsmcc_parse_crc32_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_crc32_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_crc32 *crc32 = &desc->data.crc32;
 
-	(void) length; /* TODO check data length */
-
 	desc->type = DSMCC_DESCRIPTOR_CRC32;
-	crc32->crc = dsmcc_getlong(data);
+	if (!dsmcc_getlong(&crc32->crc, data, 0, length))
+		return -1;
 
 	DSMCC_DEBUG("CRC32 descriptor, crc=0x%lx", crc32->crc);
+	return 4;
 }
 
-static void dsmcc_parse_location_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_location_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_location *location = &desc->data.location;
 
-	(void) length; /* TODO check data length */
-
 	desc->type = DSMCC_DESCRIPTOR_LOCATION;
-	location->location_tag = data[0];
+	if (!dsmcc_getbyte(&location->location_tag, data, 0, length))
+		return -1;
 
 	DSMCC_DEBUG("Location descriptor, location_tag=%d", location->location_tag);
+	return 1;
 }
 
-static void dsmcc_parse_dltime_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_dltime_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_dltime *dltime = &desc->data.dltime;
 
-	(void) length; /* TODO check data length */
-
 	desc->type = DSMCC_DESCRIPTOR_DLTIME;
-	dltime->download_time = dsmcc_getlong(data);
+	if (!dsmcc_getlong(&dltime->download_time, data, 0, length))
+		return -1;
 
 	DSMCC_DEBUG("Dltime descriptor, download_time=%d", dltime->download_time);
+	return 4;
 }
 
-static void dsmcc_parse_grouplink_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_grouplink_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_grouplink *grouplink = &desc->data.grouplink;
 
-	(void) length; /* TODO check data length */
-
 	desc->type = DSMCC_DESCRIPTOR_GROUPLINK;
-	grouplink->position = data[0];
-	grouplink->group_id = dsmcc_getlong(data + 1);
+	if (!dsmcc_getbyte(&grouplink->position, data, 0, length))
+		return -1;
+	if (!dsmcc_getlong(&grouplink->group_id, data, 1, length))
+		return -1;
 
 	DSMCC_DEBUG("Grouplink descriptor, position=%d group_id=%d", grouplink->position, grouplink->group_id);
+	return 5;
 }
 
-static void dsmcc_parse_compressed_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_compressed_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_compressed *compressed = &desc->data.compressed;
 
-	(void) length; /* TODO check data length */
-
 	desc->type = DSMCC_DESCRIPTOR_COMPRESSED;
-	compressed->method = data[0];
-	compressed->original_size = dsmcc_getlong(data + 1);
+	if (!dsmcc_getbyte(&compressed->method, data, 0, length))
+		return -1;
+	if (!dsmcc_getlong(&compressed->original_size, data, 1, length))
+		return -1;
 
 	DSMCC_DEBUG("Compressed descriptor, method=%d original_size=%d", compressed->method, compressed->original_size);
+	return 5;
 }
 
-static void dsmcc_parse_label_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_label_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_label *label = &desc->data.label;
 
-	(void) length; /* TODO check data length */
-
 	desc->type = DSMCC_DESCRIPTOR_LABEL;
-	label->text = malloc(length);
-	memcpy(label->text, data, length);
+	if (!dsmcc_strdup(&label->text, length, data, 0, length))
+		return -1;
 
 	DSMCC_DEBUG("Label descriptor, text='%s'", label->text);
+	return length;
 }
 
-static void dsmcc_parse_caching_priority_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_caching_priority_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_caching_priority *caching_priority = &desc->data.caching_priority;
 
-	(void) length; /* TODO check data length */
-
 	desc->type = DSMCC_DESCRIPTOR_CACHING_PRIORITY;
-	caching_priority->priority_value = data[0];
-	caching_priority->transparency_level = data[1];
+	if (!dsmcc_getbyte(&caching_priority->priority_value, data, 0, length))
+		return -1;
+	if (!dsmcc_getbyte(&caching_priority->transparency_level, data, 1, length))
+		return -1;
 
 	DSMCC_DEBUG("Caching priority descriptor, priority_value=%d, transparency_level=%d", caching_priority->priority_value, caching_priority->transparency_level);
+	return 2;
 }
 
-static void dsmcc_parse_content_type_descriptor(struct dsmcc_descriptor *desc, unsigned char *data, int length)
+static int dsmcc_parse_content_type_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_content_type *content_type = &desc->data.content_type;
 
-	(void) length; /* TODO check data length */
-
 	desc->type = DSMCC_DESCRIPTOR_LABEL;
-	content_type->text = malloc(length);
-	memcpy(content_type->text, data, length);
+	if (!dsmcc_strdup(&content_type->text, length, data, 0, length))
+		return -1;
 
 	DSMCC_DEBUG("Content type descriptor, text='%s'", content_type->text);
+	return length;
 }
 
 static int dsmcc_parse_one_descriptor(struct dsmcc_descriptor **descriptor, uint8_t *data, int data_length)
 {
-	int off = 0;
+	int off = 0, ret;
 	struct dsmcc_descriptor *desc;
 	unsigned char tag, length;
 
-	(void) data_length; /* TODO check data length */
-
 	desc = malloc(sizeof(struct dsmcc_descriptor));
-	tag = data[off];
+	if (!dsmcc_getbyte(&tag, data, off, data_length))
+		goto error;
 	off++;
-	length = data[off];
+	if (!dsmcc_getbyte(&length, data, off, data_length))
+		goto error;
 	off++;
+
+	if (length > data_length - off)
+	{
+		DSMCC_ERROR("Buffer overflow while parsing descriptors (got %d bytes but need %d)", data_length - off, length);
+		goto error;
+	}
 
 	switch(tag) {
 		case 0x01:
-			dsmcc_parse_type_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_type_descriptor(desc, data + off, length);
 			break;
 		case 0x02:
-			dsmcc_parse_name_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_name_descriptor(desc, data + off, length);
 			break;
 		case 0x03:
-			dsmcc_parse_info_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_info_descriptor(desc, data + off, length);
 			break;
 		case 0x04:
-			dsmcc_parse_modlink_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_modlink_descriptor(desc, data + off, length);
 			break;
 		case 0x05:
-			dsmcc_parse_crc32_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_crc32_descriptor(desc, data + off, length);
 			break;
 		case 0x06:
-			dsmcc_parse_location_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_location_descriptor(desc, data + off, length);
 			break;
 		case 0x07:
-			dsmcc_parse_dltime_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_dltime_descriptor(desc, data + off, length);
 			break;
 		case 0x08:
-			dsmcc_parse_grouplink_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_grouplink_descriptor(desc, data + off, length);
 			break;
 		case 0x09:
-			dsmcc_parse_compressed_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_compressed_descriptor(desc, data + off, length);
 			break;
 		case 0x70:
-			dsmcc_parse_label_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_label_descriptor(desc, data + off, length);
 			break;
 		case 0x71:
-			dsmcc_parse_caching_priority_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_caching_priority_descriptor(desc, data + off, length);
 			break;
 		case 0x72:
-			dsmcc_parse_content_type_descriptor(desc, data + off, length);
+			ret = dsmcc_parse_content_type_descriptor(desc, data + off, length);
 			break;
 		default:
 			DSMCC_WARN("Unknown/Unhandled descriptor, Tag 0x%02x Length %d", tag, length);
+			ret = length;
 			free(desc);
 			desc = NULL;
 	}
 
+	if (ret < 0)
+		goto error;
+
+	if (ret < length)
+		DSMCC_WARN("Trailing data after descriptor (Tag 0x%02x Length %d, parsed %d bytes)", tag, length, ret);
+
 	off += length;
-
 	*descriptor = desc;
-
 	return off;
+error:
+	free(desc);
+	desc = NULL;
+	return -1;
 }
 
 int dsmcc_parse_descriptors(struct dsmcc_descriptor **descriptors, uint8_t *data, int data_length)
@@ -268,7 +292,11 @@ int dsmcc_parse_descriptors(struct dsmcc_descriptor **descriptors, uint8_t *data
 	{
 		struct dsmcc_descriptor *desc = NULL;
 		ret = dsmcc_parse_one_descriptor(&desc, data + off, data_length - off);
-		/* no need to check ret < 0, dsmcc_parse_one_descriptor always succeeds */
+		if (ret < 0)
+		{
+			dsmcc_descriptors_free_all(list_head);
+			return -1;
+		}
 		off += ret;
 
 		if (desc)
@@ -287,7 +315,9 @@ int dsmcc_parse_descriptors(struct dsmcc_descriptor **descriptors, uint8_t *data
 		}
 	}
 
-	*descriptors = list_head;
+	if (off < data_length)
+		DSMCC_WARN("Trailing data after descriptors (%d bytes remaining)", data_length - off);
 
+	*descriptors = list_head;
 	return off;
 }

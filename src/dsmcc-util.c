@@ -62,16 +62,6 @@ uint32_t dsmcc_crc32(uint8_t *data, uint32_t len)
 	return crc;
 }
 
-uint32_t dsmcc_getlong(uint8_t *data)
-{
-	return (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
-}
-
-uint16_t dsmcc_getshort(uint8_t *data)
-{
-	return (data[0] << 8) | data[1];
-}
-
 void dsmcc_mkdir(const char *name, mode_t mode)
 {
 	char *pos, *namecopy;

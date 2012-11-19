@@ -15,13 +15,13 @@ struct dsmcc_descriptor_name
 
 struct dsmcc_descriptor_info
 {
-	char  lang_code[3];
+	char *lang_code;
 	char *text;
 };
 
 struct dsmcc_descriptor_modlink
 {
-	char     position;
+	uint8_t  position;
 	uint16_t module_id;
 };
 

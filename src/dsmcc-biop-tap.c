@@ -13,30 +13,28 @@ static int dsmcc_biop_parse_tap(struct biop_tap *tap, uint8_t *data, int data_le
 	int off = 0;
 	uint16_t id;
 
-	(void) data_length; /* TODO check data length */
-
-	id = dsmcc_getshort(data);
+	if (!dsmcc_getshort(&id, data, off, data_length))
+		return -1;
 	off += 2;
 	DSMCC_DEBUG("ID = 0x%hx", id);
 
-	tap->use = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&tap->use, data, off, data_length))
+		return -1;
 	off += 2;
 	DSMCC_DEBUG("Use = 0x%hx (%s)", tap->use, dsmcc_biop_get_tap_use_str(tap->use));
 
-	tap->assoc_tag = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&tap->assoc_tag, data, off, data_length))
+		return -1;
 	off+=2;
 	DSMCC_DEBUG("Assoc = 0x%hx", tap->assoc_tag);
 
-	tap->selector_length = data[off++];
-	if (tap->selector_length> 0)
-	{
-		tap->selector_data = malloc(tap->selector_length);
-		memcpy(tap->selector_data, data + off, tap->selector_length);
-	}
-	else
-		tap->selector_data = NULL;
-	off += tap->selector_length;
+	if (!dsmcc_getbyte(&tap->selector_length, data, off, data_length))
+		return -1;
+	off++;
 	DSMCC_DEBUG("Selector Length = %hhd", tap->selector_length);
+	if (!dsmcc_memdup(&tap->selector_data, tap->selector_length, data, off, data_length))
+		return -1;
+	off += tap->selector_length;
 
 	return off;
 }
@@ -46,7 +44,8 @@ int dsmcc_biop_parse_taps_keep_only_first(struct biop_tap **tap0, uint16_t tap0_
 	int off = 0, ret, i;
 	uint8_t taps_count;
 
-	taps_count = data[off];
+	if (!dsmcc_getbyte(&taps_count, data, off, data_length))
+		return -1;
 	off++;
 	if (taps_count < 1)
 	{

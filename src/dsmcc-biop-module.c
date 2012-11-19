@@ -16,29 +16,34 @@ int dsmcc_biop_parse_module_info(struct biop_module_info *module_info, uint8_t *
 
 	memset(module_info, 0, sizeof(struct biop_module_info));
 
-	module_info->mod_timeout = dsmcc_getlong(data);
+	if (!dsmcc_getlong(&module_info->mod_timeout, data, off, data_length))
+		return -1;
 	off += 4;
 	DSMCC_DEBUG("Mod Timeout = %lu", module_info->mod_timeout);
 
-	module_info->block_timeout = dsmcc_getlong(data + off);
+	if (!dsmcc_getlong(&module_info->block_timeout, data, off, data_length))
+		return -1;
 	off += 4;
 	DSMCC_DEBUG("Block Timeout = %lu", module_info->block_timeout);
 
-	module_info->min_blocktime = dsmcc_getlong(data + off);
+	if (!dsmcc_getlong(&module_info->min_blocktime, data, off, data_length))
+		return -1;
 	off += 4;
 	DSMCC_DEBUG("Min Block Timeout = %lu", module_info->min_blocktime);
 
 	ret = dsmcc_biop_parse_taps_keep_only_first(&tap, BIOP_OBJECT_USE, data + off, data_length - off);
 	if (ret < 0)
 	{
-		dsmcc_biop_free_module_info(module_info);
+		dsmcc_biop_free_tap(tap);
 		return -1;
 	}
 	off += ret;
 	module_info->assoc_tag = tap->assoc_tag;
 	dsmcc_biop_free_tap(tap);
 
-	userinfo_len = data[off++];
+	if (!dsmcc_getbyte(&userinfo_len, data, off, data_length))
+		return -1;
+	off++;
 	DSMCC_DEBUG("UserInfo Len = %d", userinfo_len);
 
 	if (userinfo_len > 0)

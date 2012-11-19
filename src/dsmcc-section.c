@@ -50,12 +50,12 @@ static int dsmcc_parse_section_header(struct dsmcc_section_header *header, uint8
 	int private_indicator;
 	int crc;
 
-	(void) data_length; /* TODO check data length */
-
-	header->table_id = data[off];
+	if (!dsmcc_getbyte(&header->table_id, data, off, data_length))
+		return -1;
 	off++;
 
-	header->length = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&header->length, data, off, data_length))
+		return -1;
 	off += 2;
 	section_syntax_indicator = ((header->length & 0x8000) != 0);
 	private_indicator = ((header->length & 0x4000) != 0);
@@ -76,7 +76,8 @@ static int dsmcc_parse_section_header(struct dsmcc_section_header *header, uint8
 		return -1;
 	}
 
-	header->table_id_extension = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&header->table_id_extension, data, off, data_length))
+		return -1;
 	off += 2;
 
 	// skip unused fields
@@ -94,9 +95,8 @@ static int dsmcc_parse_message_header(struct dsmcc_message_header *header, uint8
 	int off = 0;
 	uint8_t protocol, type, adaptation_length;
 
-	(void) data_length; /* TODO check data length */
-
-	protocol = data[off];
+	if (!dsmcc_getbyte(&protocol, data, off, data_length))
+		return -1;
 	off++;
 	if (protocol != 0x11)
 	{
@@ -104,7 +104,8 @@ static int dsmcc_parse_message_header(struct dsmcc_message_header *header, uint8
 		return -1;
 	}
 
-	type = data[off];
+	if (!dsmcc_getbyte(&type, data, off, data_length))
+		return -1;
 	off++;
 	if (type != 0x3)
 	{
@@ -112,30 +113,34 @@ static int dsmcc_parse_message_header(struct dsmcc_message_header *header, uint8
 		return -1;
 	}
 
-	header->message_id = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&header->message_id, data, off, data_length))
+		return -1;
 	off += 2;
 	DSMCC_DEBUG("Message Header: MessageID 0x%hx", header->message_id);
 
-	header->transaction_id = dsmcc_getlong(data + off);
+	if (!dsmcc_getlong(&header->transaction_id, data, off, data_length))
+		return -1;
 	off += 4;
 	DSMCC_DEBUG("Message Header: TransactionID 0x%x", header->transaction_id);
 
 	/* skip reserved byte */
 	off += 1;
 
-	adaptation_length = data[off];
+	if (!dsmcc_getbyte(&adaptation_length, data, off, data_length))
+		return -1;
 	off++;
 	DSMCC_DEBUG("Message Header: Adaptation Length %hhu", adaptation_length);
 
-	header->message_length = dsmcc_getshort(data + off) - adaptation_length;
+	if (!dsmcc_getshort(&header->message_length, data, off, data_length))
+		return -1;
 	off += 2;
+	header->message_length -= adaptation_length;
 	DSMCC_DEBUG("Message Header: Message Length %d (excluding adaption header)", header->message_length);
 
 	/* skip adaptation header */
 	off += adaptation_length;
 
 	return off;
-
 }
 
 /*
@@ -148,45 +153,46 @@ static int dsmcc_parse_biop_service_gateway_info(struct biop_ior *gateway_ior, u
 
 	ret = dsmcc_biop_parse_ior(gateway_ior, data + off, data_length - off);
 	if (ret < 0)
-	{
-		dsmcc_biop_free_ior(gateway_ior);
-		return -1;
-	}
+		goto error;
 	off += ret;
 
 	if (gateway_ior->type != IOR_TYPE_DSM_SERVICE_GATEWAY)
 	{
 		DSMCC_ERROR("Service Gateway: Expected an IOR of type DSM:ServiceGateway, but got \"%s\"", dsmcc_biop_get_ior_type_str(gateway_ior->type));
-		dsmcc_biop_free_ior(gateway_ior);
-		return -1;
+		goto error;
 	}
 
 	/* Download Taps count, should be 0 */
-	tmp = data[off];
+	if (!dsmcc_getbyte(&tmp, data, off, data_length))
+		goto error;
 	off++;
 	if (tmp != 0)
 	{
 		DSMCC_ERROR("Service Gateway: Download Taps count should be 0 but is %d", tmp);
-		dsmcc_biop_free_ior(gateway_ior);
-		return -1;
+		goto error;
 	}
 
 	/* Service Context List count, should be 0 */
-	tmp = data[off];
+	if (!dsmcc_getbyte(&tmp, data, off, data_length))
+		goto error;
 	off++;
 	if (tmp != 0)
 	{
 		DSMCC_ERROR("Service Gateway: Service Context List count should be 0 but is %d", tmp);
-		dsmcc_biop_free_ior(gateway_ior);
-		return -1;
+		goto error;
 	}
 
 	/* TODO parse descriptors in user_data, for now just skip it */
-	tmp = data[off];
+	if (!dsmcc_getbyte(&tmp, data, off, data_length))
+		goto error;
 	off++;
 	off += tmp;
 
 	return off;
+
+error:
+	dsmcc_biop_free_ior(gateway_ior);
+	return -1;
 }
 
 /*
@@ -204,7 +210,8 @@ static int dsmcc_parse_section_dsi(struct dsmcc_state *state, struct dsmcc_objec
 	off += 20;
 
 	/* compatibility descriptor length, should be 0 */
-	i = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&i, data, off, data_length))
+		return -1;
 	off += 2;
 	if (i != 0)
 	{
@@ -212,7 +219,8 @@ static int dsmcc_parse_section_dsi(struct dsmcc_state *state, struct dsmcc_objec
 		return -1;
 	}
 
-	dsi_data_length = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&dsi_data_length, data, off, data_length))
+		return -1;
 	off += 2;
 	DSMCC_DEBUG("DSI: Data Length %d", dsi_data_length);
 	if (dsi_data_length > data_length - off)
@@ -256,11 +264,13 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 	uint16_t i, number_modules;
 	struct dsmcc_dii dii;
 
-	dii.download_id = dsmcc_getlong(data);
+	if (!dsmcc_getlong(&dii.download_id, data, off, data_length))
+		return -1;
 	off += 4;
 	DSMCC_DEBUG("DII: Download ID %lX", dii.download_id);
 
-	dii.block_size = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&dii.block_size, data, off, data_length))
+		return -1;
 	off += 2;
 	DSMCC_DEBUG("DII: Block Size %d", dii.block_size);
 
@@ -268,7 +278,8 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 	off += 10;
 
 	/* compatibility descriptor length, should be 0 */
-	i = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&i, data, off, data_length))
+		return -1;
 	off += 2;
 	if (i != 0)
 	{
@@ -276,7 +287,8 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 		return -1;
 	}
 
-	number_modules = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&number_modules, data, off, data_length))
+		return -1;
 	off += 2;
 	DSMCC_DEBUG("DII: Number of modules = %d", number_modules);
 
@@ -286,13 +298,17 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 		struct biop_module_info *bmi;
 		uint8_t module_info_length;
 
-		dmi.module_id = dsmcc_getshort(data + off);
+		if (!dsmcc_getshort(&dmi.module_id, data, off, data_length))
+			return -1;
 		off += 2;
-		dmi.module_size = dsmcc_getlong(data + off);
+		if (!dsmcc_getlong(&dmi.module_size, data, off, data_length))
+			return -1;
 		off += 4;
-		dmi.module_version = data[off];
+		if (!dsmcc_getbyte(&dmi.module_version, data, off, data_length))
+			return -1;
 		off++;
-		module_info_length = data[off];
+		if (!dsmcc_getbyte(&module_info_length, data, off, data_length))
+			return -1;
 		off++;
 
 		DSMCC_DEBUG("DII: Module ID %d: Size %ld Version %d", dmi.module_id, dmi.module_size, dmi.module_version);
@@ -311,9 +327,11 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 	}
 
 	/* skip private_data */
-	i = dsmcc_getshort(data + off);
-	off += i;
+	if (!dsmcc_getshort(&i, data, off, data_length))
+		return -1;
+	off += 2;
 	DSMCC_DEBUG("DII: Private Data Length = %d", i);
+	off += i;
 
 	return off;
 }
@@ -368,15 +386,14 @@ static int dsmcc_parse_section_control(struct dsmcc_state *state, struct dsmcc_s
 /*
  * ETSI TR 101 202 Table A.2
  */
-static int dsmcc_parse_data_header(struct dsmcc_data_header *header, uint8_t *data, int length)
+static int dsmcc_parse_data_header(struct dsmcc_data_header *header, uint8_t *data, int data_length)
 {
 	int off = 0;
 	uint8_t protocol, type, adaptation_length;
 	uint16_t message_id;
 
-	(void) length; /* TODO check data length */
-
-	protocol = data[off];
+	if (!dsmcc_getbyte(&protocol, data, off, data_length))
+		return -1;
 	off++;
 	if (protocol != 0x11)
 	{
@@ -384,7 +401,8 @@ static int dsmcc_parse_data_header(struct dsmcc_data_header *header, uint8_t *da
 		return -1;
 	}
 
-	type = data[off];
+	if (!dsmcc_getbyte(&type, data, off, data_length))
+		return -1;
 	off++;
 	if (type != 0x3)
 	{
@@ -392,7 +410,8 @@ static int dsmcc_parse_data_header(struct dsmcc_data_header *header, uint8_t *da
 		return -1;
 	}
 
-	message_id = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&message_id, data, off, data_length))
+		return -1;
 	off += 2;
 	if (message_id != 0x1003)
 	{
@@ -400,19 +419,23 @@ static int dsmcc_parse_data_header(struct dsmcc_data_header *header, uint8_t *da
 		return -1;
 	}
 
-	header->download_id = dsmcc_getlong(data + off);
+	if (!dsmcc_getlong(&header->download_id, data, off, data_length))
+		return -1;
 	off += 4;
 	DSMCC_DEBUG("Data Header: Download ID 0x%lx", header->download_id);
 
 	/* skip reserved byte */
 	off += 1;
 
-	adaptation_length = data[off];
+	if (!dsmcc_getbyte(&adaptation_length, data, off, data_length))
+		return -1;
 	off++;
 	DSMCC_DEBUG("Data Header: Adaptation Length %d", adaptation_length);
 
-	header->message_length = dsmcc_getshort(data + off) - adaptation_length;
+	if (!dsmcc_getshort(&header->message_length, data, off, data_length))
+		return -1;
 	off += 2;
+	header->message_length -= adaptation_length;
 	DSMCC_DEBUG("Data Header: Message Length %d (excluding adaption header)", header->message_length);
 
 	/* skip adaptation header */
@@ -429,18 +452,21 @@ static int dsmcc_parse_section_ddb(struct dsmcc_state *state, struct dsmcc_objec
 	int off = 0;
 	struct dsmcc_ddb ddb;
 
-	ddb.module_id = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&ddb.module_id, data, off, data_length))
+		return -1;
 	off += 2;
 	DSMCC_DEBUG("DDB: Module ID %u", ddb.module_id);
 
-	ddb.module_version = data[off];
+	if (!dsmcc_getbyte(&ddb.module_version, data, off, data_length))
+		return -1;
 	off++;
 	DSMCC_DEBUG("DDB: Module Version %u", ddb.module_version);
 
 	/* skip reserved byte */
 	off++;
 
-	ddb.number = dsmcc_getshort(data + off);
+	if (!dsmcc_getshort(&ddb.number, data, off, data_length))
+		return -1;
 	off += 2;
 	DSMCC_DEBUG("DDB: Block Number %u", ddb.number);
 
