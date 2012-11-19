@@ -30,7 +30,8 @@ static int dsmcc_biop_parse_dsm_conn_binder(struct biop_dsm_conn_binder *binder,
 		goto error;
 	}
 
-	dsmcc_getshort(&selector_type, tap->selector_data, 0, tap->selector_length);
+	if (!dsmcc_getshort(&selector_type, tap->selector_data, 0, tap->selector_length))
+		goto error;
 	if (selector_type != 0x01)
 	{
 		DSMCC_ERROR("Invalid selector type while parsing BIOP_DELIVERY_PARA_USE tap (got 0x%hx but expected 0x01)", selector_type);
