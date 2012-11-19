@@ -77,13 +77,13 @@ void dsmcc_stream_add_assoc_tag(struct dsmcc_stream *stream, uint16_t assoc_tag)
 	DSMCC_DEBUG("Added assoc_tag 0x%hx to stream with pid 0x%hx", assoc_tag, stream->pid);
 }
 
-static void dsmcc_stream_queue_add_entry(struct dsmcc_queue_entry **list_head, struct dsmcc_queue_entry *entry)
+static void dsmcc_stream_queue_add_entry(struct dsmcc_stream *stream, struct dsmcc_queue_entry *entry)
 {
 	entry->prev = NULL;
-	entry->next = *list_head;
+	entry->next = stream->queue;
 	if (entry->next)
 		entry->next->prev = entry;
-	*list_head = entry;
+	stream->queue = entry;
 }
 
 void dsmcc_stream_queue_add(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, struct dsmcc_queue_entry *entry)
@@ -96,7 +96,7 @@ void dsmcc_stream_queue_add(struct dsmcc_state *state, int stream_selector_type,
 		str = dsmcc_find_stream_by_assoc_tag(state->streams, stream_selector);
 		if (str)
 		{
-			dsmcc_stream_queue_add_entry(&state->streams->queue, entry);
+			dsmcc_stream_queue_add_entry(str, entry);
 			return;
 		}
 
@@ -127,7 +127,7 @@ void dsmcc_stream_queue_add(struct dsmcc_state *state, int stream_selector_type,
 
 	if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
 		dsmcc_stream_add_assoc_tag(str, stream_selector);
-	dsmcc_stream_queue_add_entry(&state->streams->queue, entry);
+	dsmcc_stream_queue_add_entry(str, entry);
 }
 
 struct dsmcc_queue_entry *dsmcc_stream_find_queue_entry(struct dsmcc_stream *stream, int type, uint32_t id)
