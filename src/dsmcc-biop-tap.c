@@ -25,7 +25,7 @@ static int dsmcc_biop_parse_tap(struct biop_tap *tap, uint8_t *data, int data_le
 
 	if (!dsmcc_getshort(&tap->assoc_tag, data, off, data_length))
 		return -1;
-	off+=2;
+	off += 2;
 	DSMCC_DEBUG("Assoc = 0x%hx", tap->assoc_tag);
 
 	if (!dsmcc_getbyte(&tap->selector_length, data, off, data_length))
@@ -56,7 +56,7 @@ int dsmcc_biop_parse_taps_keep_only_first(struct biop_tap **tap0, uint16_t tap0_
 
 	for (i = 0; i < taps_count; i++)
 	{
-		struct biop_tap *tap = malloc(sizeof(struct biop_tap));
+		struct biop_tap *tap = calloc(1, sizeof(struct biop_tap));
 
 		ret = dsmcc_biop_parse_tap(tap, data + off, data_length - off);
 		if (ret < 0)
@@ -71,7 +71,7 @@ int dsmcc_biop_parse_taps_keep_only_first(struct biop_tap **tap0, uint16_t tap0_
 		{
 			if (tap->use != tap0_use)
 			{
-				DSMCC_ERROR("Expected a first tap with BIOP_DELIVERY_PARA_USE, but got Use 0x%hx (%s)", tap->use, dsmcc_biop_get_tap_use_str(tap->use));
+				DSMCC_ERROR("Expected a first tap with %s, but got Use 0x%hx (%s)", dsmcc_biop_get_tap_use_str(tap0_use), tap->use, dsmcc_biop_get_tap_use_str(tap->use));
 				dsmcc_biop_free_tap(tap);
 				return -1;
 			}
