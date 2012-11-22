@@ -6,12 +6,24 @@
 #include "dsmcc-cache-module.h"
 #include "dsmcc-cache-file.h"
 
-void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
+int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
 {
 	struct dsmcc_object_carousel *car;
+	struct dsmcc_stream *stream;
 	struct dsmcc_queue_entry *entry;
 
-	// TODO Check that carousel is not already requested
+	/* Check that carousel is not already requested */
+	stream = dsmcc_stream_find(state, DSMCC_STREAM_SELECTOR_PID, pid, 0);
+	if (stream)
+	{
+		entry = dsmcc_stream_queue_find_entry(stream, DSMCC_QUEUE_ENTRY_DSI, transaction_id);
+		if (entry)
+		{
+			DSMCC_ERROR("Carousel on PID 0x%hx with Transaction ID 0x%x already requested", pid, transaction_id);
+			return 0;
+		}
+	}
+
 	car = calloc(1, sizeof(struct dsmcc_object_carousel));
 	dsmcc_filecache_init(car, downloadpath, cache_callback, cache_callback_arg);
 	car->state = state;
@@ -23,6 +35,8 @@ void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transa
 	entry->type = DSMCC_QUEUE_ENTRY_DSI;
 	entry->id = transaction_id;
 	dsmcc_stream_queue_add(state, DSMCC_STREAM_SELECTOR_PID, pid, entry);
+
+	return 1;
 }
 
 struct dsmcc_object_carousel *dsmcc_find_carousel_by_id(struct dsmcc_object_carousel *carousels, uint32_t cid)

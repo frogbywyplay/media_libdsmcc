@@ -52,31 +52,44 @@ static uint16_t stream_sub_callback(void *arg, uint16_t assoc_tag)
 #endif
 }
 
-static int cache_callback(void *arg, uint32_t cid, int reason, char *path, char *fullpath)
+static int cache_callback(void *arg, uint32_t cid, int type, int reason, const char *path, const char *fullpath)
 {
-	char *r;
+	char *t, *r;
 
 	(void) arg;
 	(void) fullpath;
 
-	switch (reason)
+	switch (type)
 	{
-		case DSMCC_CACHE_DIR_CHECK:
-			r = "DIR_CHECK";
+		case DSMCC_CACHE_DIR:
+			t = "directory";
 			break;
-		case DSMCC_CACHE_DIR_SAVED:
-			r = "DIR_SAVED";
-			break;
-		case DSMCC_CACHE_FILE_CHECK:
-			r = "FILE_CHECK";
-			break;
-		case DSMCC_CACHE_FILE_SAVED:
-			r = "FILE_SAVED";
+		case DSMCC_CACHE_FILE:
+			t = "file";
 			break;
 		default:
-			r = "UNKNOWN";
+			t = "?";
 	}
-	fprintf(stderr, "[main] Cache callback for %d:%s (%s)\n", cid, path, r);
+
+	switch (reason)
+	{
+		case DSMCC_CACHE_CHECK:
+			r = "check";
+			break;
+		case DSMCC_CACHE_CREATED:
+			r = "created";
+			break;
+		case DSMCC_CACHE_UPDATED:
+			r = "updated";
+			break;
+		case DSMCC_CACHE_DELETED:
+			r = "deleted";
+			break;
+		default:
+			r = "?";
+	}
+
+	fprintf(stderr, "[main] Cache callback for %d:%s (%s %s)\n", cid, path, t, r);
 
 	return 1;
 };
@@ -91,19 +104,16 @@ static int parse_stream(FILE *ts, struct dsmcc_state *state, struct dsmcc_tspars
 	while(running)
 	{
 		rc = fread(buf, 1, 188, ts);
-		if(rc < 1)
+		if (rc < 0)
 		{
-			if(ferror(ts))
-			{
-				fprintf(stderr, "read error : %s\n", strerror(errno));
-				ret = -1;
-				break;
-			}
-			else
-			{
-				// EOF, parse remaining data
-				dsmcc_tsparser_parse_buffered_sections(state, *buffers);
-			}
+			fprintf(stderr, "read error : %s\n", strerror(errno));
+			ret = -1;
+			break;
+		}
+		else if (rc == 0)
+		{
+			// EOF, parse remaining data
+			dsmcc_tsparser_parse_buffered_sections(state, *buffers);
 			break;
 		}
 		else

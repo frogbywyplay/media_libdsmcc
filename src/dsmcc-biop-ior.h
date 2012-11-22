@@ -14,8 +14,8 @@ struct biop_obj_location
 {
 	uint32_t carousel_id;
 	uint16_t module_id;
-	uint8_t  objkey_len;
-	uint8_t *objkey;
+	uint32_t key;
+	uint32_t key_mask;
 };
 
 struct biop_profile_body
@@ -41,6 +41,5 @@ struct biop_ior
 
 int dsmcc_biop_parse_ior(struct biop_ior *ior, uint8_t *data, int data_length);
 const char *dsmcc_biop_get_ior_type_str(int type);
-void dsmcc_biop_free_ior(struct biop_ior *ior);
 
 #endif /* DSMCC_BIOP_IOR_H */

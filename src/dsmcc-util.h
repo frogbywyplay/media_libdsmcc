@@ -6,7 +6,10 @@
 #include <sys/types.h>
 
 uint32_t dsmcc_crc32(uint8_t *data, uint32_t len);
+
 void dsmcc_mkdir(const char *name, mode_t mode);
+bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int length);
+bool dsmcc_file_write_block(const char *dstfile, int offset, uint8_t *data, int length);
 
 static inline bool dsmcc_getlong(uint32_t *dst, const uint8_t *data, int offset, int length)
 {
@@ -35,6 +38,30 @@ static inline bool dsmcc_getbyte(uint8_t *dst, const uint8_t *data, int offset, 
 	if (length < 1)
 		return 0;
 	*dst = data[0];
+	return 1;
+}
+
+static inline bool dsmcc_getkey(uint32_t *dstkey, uint32_t *dstkey_mask, int key_length, const uint8_t *data, int offset, int length)
+{
+	uint32_t key = 0, key_mask = 0;
+	uint8_t tmp;
+	int i;
+
+	if (key_length < 0 || key_length > 4)
+		return 0;
+
+	for (i = 0; i < key_length; i++)
+	{
+		if (!dsmcc_getbyte(&tmp, data, offset, length))
+			return 0;
+		offset++;
+		key = (key << 8) | tmp;
+		key_mask = (key_mask << 8) | 0xff;
+	}
+
+	*dstkey = key;
+	*dstkey_mask = key_mask;
+
 	return 1;
 }
 

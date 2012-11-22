@@ -96,7 +96,7 @@ static int dsmcc_parse_modlink_descriptor(struct dsmcc_descriptor *desc, uint8_t
 	if (!dsmcc_getshort(&modlink->module_id, data, 1, length))
 		return -1;
 
-	DSMCC_DEBUG("Modlink descriptor, position=%d module_id=%d", modlink->position, modlink->module_id);
+	DSMCC_DEBUG("Modlink descriptor, position=%hhu module_id=0x%04hx", modlink->position, modlink->module_id);
 	return 3;
 }
 
@@ -120,7 +120,7 @@ static int dsmcc_parse_location_descriptor(struct dsmcc_descriptor *desc, uint8_
 	if (!dsmcc_getbyte(&location->location_tag, data, 0, length))
 		return -1;
 
-	DSMCC_DEBUG("Location descriptor, location_tag=%d", location->location_tag);
+	DSMCC_DEBUG("Location descriptor, location_tag=%hhu", location->location_tag);
 	return 1;
 }
 
@@ -132,7 +132,7 @@ static int dsmcc_parse_dltime_descriptor(struct dsmcc_descriptor *desc, uint8_t 
 	if (!dsmcc_getlong(&dltime->download_time, data, 0, length))
 		return -1;
 
-	DSMCC_DEBUG("Dltime descriptor, download_time=%d", dltime->download_time);
+	DSMCC_DEBUG("Dltime descriptor, download_time=%u", dltime->download_time);
 	return 4;
 }
 
@@ -146,7 +146,7 @@ static int dsmcc_parse_grouplink_descriptor(struct dsmcc_descriptor *desc, uint8
 	if (!dsmcc_getlong(&grouplink->group_id, data, 1, length))
 		return -1;
 
-	DSMCC_DEBUG("Grouplink descriptor, position=%d group_id=%d", grouplink->position, grouplink->group_id);
+	DSMCC_DEBUG("Grouplink descriptor, position=%hhu group_id=0x%04hx", grouplink->position, grouplink->group_id);
 	return 5;
 }
 
@@ -160,7 +160,7 @@ static int dsmcc_parse_compressed_descriptor(struct dsmcc_descriptor *desc, uint
 	if (!dsmcc_getlong(&compressed->original_size, data, 1, length))
 		return -1;
 
-	DSMCC_DEBUG("Compressed descriptor, method=%d original_size=%d", compressed->method, compressed->original_size);
+	DSMCC_DEBUG("Compressed descriptor, method=%hhu original_size=%u", compressed->method, compressed->original_size);
 	return 5;
 }
 
@@ -186,7 +186,7 @@ static int dsmcc_parse_caching_priority_descriptor(struct dsmcc_descriptor *desc
 	if (!dsmcc_getbyte(&caching_priority->transparency_level, data, 1, length))
 		return -1;
 
-	DSMCC_DEBUG("Caching priority descriptor, priority_value=%d, transparency_level=%d", caching_priority->priority_value, caching_priority->transparency_level);
+	DSMCC_DEBUG("Caching priority descriptor, priority_value=%hhu, transparency_level=%hhu", caching_priority->priority_value, caching_priority->transparency_level);
 	return 2;
 }
 

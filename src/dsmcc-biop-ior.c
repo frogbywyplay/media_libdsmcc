@@ -56,16 +56,17 @@ static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, uint8_t 
 {
 	int off = 0;
 	uint16_t version;
+	uint8_t key_len;
 
 	if (!dsmcc_getlong(&loc->carousel_id, data, off, data_length))
 		return -1;
 	off += 4;
-	DSMCC_DEBUG("Carousel id = %ld", loc->carousel_id);
+	DSMCC_DEBUG("Carousel id = 0x%08x", loc->carousel_id);
 
 	if (!dsmcc_getshort(&loc->module_id, data, off, data_length))
 		return -1;
 	off += 2;
-	DSMCC_DEBUG("Module id = %d", loc->module_id);
+	DSMCC_DEBUG("Module id = 0x%04x", loc->module_id);
 
 	if (!dsmcc_getshort(&version, data, off, data_length))
 		return -1;
@@ -76,13 +77,19 @@ static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, uint8_t 
 		return -1;
 	}
 
-	if (!dsmcc_getbyte(&loc->objkey_len, data, off, data_length))
+	if (!dsmcc_getbyte(&key_len, data, off, data_length))
 		return -1;
 	off++;
-	if (!dsmcc_memdup(&loc->objkey, loc->objkey_len, data, off, data_length))
+	if (key_len > 4)
+	{
+		DSMCC_ERROR("Invalid object key length in BIOP::ObjectLocation: got %hhu but expected less than or equal to 4", key_len);
 		return -1;
-	off += loc->objkey_len;
-	DSMCC_DEBUG("Key Length = %hhd", loc->objkey_len);
+	}
+
+	if (!dsmcc_getkey(&loc->key, &loc->key_mask, key_len, data, off, data_length))
+		return -1;
+	off += key_len;
+	DSMCC_DEBUG("Key = 0x%08x/0x%08x", loc->key, loc->key_mask);
 
 	return off;
 }
@@ -90,22 +97,29 @@ static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, uint8_t 
 static int dsmcc_biop_parse_body(struct biop_profile_body *body, uint8_t *data, int data_length)
 {
 	int off = 0, ret, i;
-	uint8_t lite_components_count;
+	uint8_t byte_order, lite_components_count;
 	uint32_t component_tag;
 	uint8_t component_data_len;
 
-	/* skip byte order */
+	/* byte order */
+	if (!dsmcc_getbyte(&byte_order, data, off, data_length))
+		return -1;
 	off++;
+	if (byte_order != 0)
+	{
+		DSMCC_ERROR("Invalid byte order in BIOPProfileBody: got %hhu but expected 0 (big endian)", byte_order);
+		return -1;
+	}
 
 	if (!dsmcc_getbyte(&lite_components_count, data, off, data_length))
 		return -1;
 	off++;
 	if (lite_components_count < 2)
 	{
-		DSMCC_ERROR("Invalid number of components in BIOPProfileBody: got %hhd but expected at least 2", lite_components_count);
+		DSMCC_ERROR("Invalid number of components in BIOPProfileBody: got %hhu but expected at least 2", lite_components_count);
 		return -1;
 	}
-	DSMCC_DEBUG("Lite Components Count %d", lite_components_count);
+	DSMCC_DEBUG("Lite Components Count %hhu", lite_components_count);
 
 	for (i = 0; i < lite_components_count; i++)
 	{
@@ -155,8 +169,6 @@ static int dsmcc_biop_parse_body(struct biop_profile_body *body, uint8_t *data, 
 	return off;
 
 error:
-	if (body->obj_loc.objkey != NULL)
-		free(body->obj_loc.objkey);
 	memset(body, 0, sizeof(*body));
 	return -1;
 }
@@ -184,42 +196,46 @@ int dsmcc_biop_parse_ior(struct biop_ior *ior, uint8_t *data, int data_length)
 {
 	int off = 0, ret, found;
 	unsigned int i;
-	uint32_t type_id_len, tagged_profiles_count;
-	char *type_id;
+	uint32_t type_id_len, type_id, tagged_profiles_count;
 
 	if (!dsmcc_getlong(&type_id_len, data, off, data_length))
 		return -1;
 	off += 4;
-	if (type_id_len <= 0)
+	if (type_id_len != 4)
 	{
-		DSMCC_ERROR("type_id_len = %d\n", type_id_len);
+		DSMCC_ERROR("Invalid type ID length in IOR: got %u but expected 4", type_id_len);
 		return -1;
 	}
-	type_id = (char *)(data + off);
-	off += type_id_len;
-	if ((type_id_len & 3) != 0)
-		off += (4 - (type_id_len & 3)); // alignement gap
-
-	if (!strcmp("DSM::Directory", type_id) || !strcmp("dir", type_id))
-		ior->type = IOR_TYPE_DSM_DIRECTORY;
-	else if (!strcmp("DSM::File", type_id) || !strcmp("fil", type_id))
-		ior->type = IOR_TYPE_DSM_FILE;
-	else if (!strcmp("DSM::Stream", type_id) || !strcmp("str", type_id))
-		ior->type = IOR_TYPE_DSM_STREAM;
-	else if (!strcmp("DSM::ServiceGateway", type_id) || !strcmp("srg", type_id))
-		ior->type = IOR_TYPE_DSM_SERVICE_GATEWAY;
-	else if (!strcmp("DSM::StreamEvent", type_id) || !strcmp("ste", type_id))
-		ior->type = IOR_TYPE_DSM_STREAM_EVENT;
-	else
-	{
-		DSMCC_ERROR("IOR with unknown type_id of length %d", type_id_len);
+	if (!dsmcc_getlong(&type_id, data, off, data_length))
 		return -1;
+	off += type_id_len;
+
+	switch (type_id)
+	{
+		case 0x64697200: /* "dir" */
+			ior->type = IOR_TYPE_DSM_DIRECTORY;
+			break;
+		case 0x66696c00: /* "fil" */
+			ior->type = IOR_TYPE_DSM_FILE;
+			break;
+		case 0x73726700: /* "srg" */
+			ior->type = IOR_TYPE_DSM_SERVICE_GATEWAY;
+			break;
+		case 0x73747200: /* "str" */
+			ior->type = IOR_TYPE_DSM_STREAM;
+			break;
+		case 0x73746500: /* "ste" */
+			ior->type = IOR_TYPE_DSM_STREAM_EVENT;
+			break;
+		default:
+			DSMCC_ERROR("IOR with unknown type_id 0x%08x", type_id);
+			return -1;
 	}
 
 	if (!dsmcc_getlong(&tagged_profiles_count, data, off, data_length))
 		return -1;
 	off += 4;
-	DSMCC_DEBUG("Tagged Profiles Count = %d", tagged_profiles_count);
+	DSMCC_DEBUG("Tagged Profiles Count = %u", tagged_profiles_count);
 
 	found = 0;
 	for (i = 0; i < tagged_profiles_count; i++)
@@ -234,7 +250,7 @@ int dsmcc_biop_parse_ior(struct biop_ior *ior, uint8_t *data, int data_length)
 		if (!dsmcc_getlong(&profile_data_length, data, off, data_length))
 			return -1;
 		off += 4;
-		DSMCC_DEBUG("Profile Data Length = %d", profile_data_length);
+		DSMCC_DEBUG("Profile Data Length = %u", profile_data_length);
 
 		if (profile_id_tag == TAG_BIOP)
 		{
@@ -249,7 +265,7 @@ int dsmcc_biop_parse_ior(struct biop_ior *ior, uint8_t *data, int data_length)
 				DSMCC_WARN("Already got a BIOPProfileBody, skipping profile %d", i);
 		}
 		else
-			DSMCC_WARN("Skipping Unknown Profile %d Id Tag %08x Size %d", i, profile_id_tag, profile_data_length);
+			DSMCC_WARN("Skipping Unknown Profile %d Id Tag 0x%08x Size %u", i, profile_id_tag, profile_data_length);
 
 		off += profile_data_length;
 	}
@@ -260,18 +276,4 @@ int dsmcc_biop_parse_ior(struct biop_ior *ior, uint8_t *data, int data_length)
 	}
 
 	return off;
-}
-
-void dsmcc_biop_free_ior(struct biop_ior *ior)
-{
-	if (ior == NULL)
-		return;
-
-	if (ior->profile_body.obj_loc.objkey != NULL)
-	{
-		free(ior->profile_body.obj_loc.objkey);
-		ior->profile_body.obj_loc.objkey = NULL;
-	}
-
-	free(ior);
 }

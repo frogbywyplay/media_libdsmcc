@@ -4,8 +4,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <errno.h>
-#include <fcntl.h>
 
 #include "dsmcc.h"
 #include "dsmcc-cache-file.h"
@@ -17,11 +15,20 @@
 #include "dsmcc-biop-message.h"
 #include "dsmcc-biop-module.h"
 
+struct dsmcc_entry
+{
+	char *path;
+	char *diskpath;
+	bool  marked;
+
+	struct dsmcc_entry *prev, *next;
+};
+
 struct dsmcc_entry_id
 {
 	uint16_t module_id;
-	uint32_t key_len;
-	uint8_t *key;
+	uint32_t key;
+	uint32_t key_mask;
 };
 
 struct dsmcc_cached_dir
@@ -29,7 +36,7 @@ struct dsmcc_cached_dir
 	struct dsmcc_entry_id id;
 
 	char *name;
-	char *dirpath;
+	char *path;
 
 	struct dsmcc_entry_id parent_id;
 
@@ -43,7 +50,7 @@ struct dsmcc_cached_file
 {
 	struct dsmcc_entry_id id;
 
-	char        *filename;
+	char        *name;
 	unsigned int data_len;
 
 	struct dsmcc_entry_id    parent_id;
@@ -59,8 +66,7 @@ struct dsmcc_file_cache
 {
 	struct dsmcc_object_carousel *carousel;
 
-	char *downloadpath;
-
+	char                   *downloadpath;
 	dsmcc_cache_callback_t *callback;
 	void                   *callback_arg;
 
@@ -68,37 +74,29 @@ struct dsmcc_file_cache
 	struct dsmcc_cached_dir  *orphan_dirs;
 	struct dsmcc_cached_file *orphan_files;
 	struct dsmcc_cached_file *nameless_files;
+
+	struct dsmcc_entry *entries;
 };
 
-void dsmcc_filecache_init(struct dsmcc_object_carousel *car, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
+void dsmcc_filecache_init(struct dsmcc_object_carousel *carousel, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
 {
-	car->filecache = calloc(1, sizeof(struct dsmcc_file_cache));
-	car->filecache->carousel = car;
+	carousel->filecache = calloc(1, sizeof(struct dsmcc_file_cache));
+	carousel->filecache->carousel = carousel;
+	carousel->filecache->callback = cache_callback;
+	carousel->filecache->callback_arg = cache_callback_arg;
 
-	car->filecache->downloadpath = strdup(downloadpath);
+	carousel->filecache->downloadpath = strdup(downloadpath);
 	if (downloadpath[strlen(downloadpath) - 1] == '/')
-		car->filecache->downloadpath[strlen(downloadpath) - 1] = '\0';
-	dsmcc_mkdir(car->filecache->downloadpath, 0755);
-
-	car->filecache->callback = cache_callback;
-	car->filecache->callback_arg = cache_callback_arg;
-}
-
-static void dsmcc_filecache_free_id_content(struct dsmcc_entry_id *id)
-{
-	if (id && id->key)
-		free(id->key);
+		carousel->filecache->downloadpath[strlen(downloadpath) - 1] = '\0';
+	dsmcc_mkdir(carousel->filecache->downloadpath, 0755);
 }
 
 static void dsmcc_filecache_free_file(struct dsmcc_cached_file *file)
 {
-	dsmcc_filecache_free_id_content(&file->id);
-	if (file->filename)
-		free(file->filename);
+	if (file->name)
+		free(file->name);
 	if (file->module_file)
 		free(file->module_file);
-	if (file->parent_id.key)
-		free(file->parent_id.key);
 	free(file);
 }
 
@@ -119,12 +117,10 @@ static void dsmcc_filecache_free_files(struct dsmcc_cached_file *file)
 
 static void dsmcc_filecache_free_dir(struct dsmcc_cached_dir *dir)
 {
-	dsmcc_filecache_free_id_content(&dir->id);
-	dsmcc_filecache_free_id_content(&dir->parent_id);
 	if (dir->name)
 		free(dir->name);
-	if (dir->dirpath)
-		free(dir->dirpath);
+	if (dir->path)
+		free(dir->path);
 	dsmcc_filecache_free_files(dir->files);
 	free(dir);
 }
@@ -148,18 +144,103 @@ static void dsmcc_filecache_free_dirs(struct dsmcc_cached_dir *dir)
 	dsmcc_filecache_free_dir(dir);
 }
 
-void dsmcc_filecache_free(struct dsmcc_object_carousel *car)
+void dsmcc_filecache_free(struct dsmcc_object_carousel *carousel)
 {
-	dsmcc_filecache_free_files(car->filecache->orphan_files);
-	dsmcc_filecache_free_files(car->filecache->nameless_files);
-	dsmcc_filecache_free_dirs(car->filecache->orphan_dirs);
+	struct dsmcc_entry *entrynext;
 
-	if (car->filecache->gateway)
-		dsmcc_filecache_free_dirs(car->filecache->gateway);
+	dsmcc_filecache_free_dirs(carousel->filecache->gateway);
+	dsmcc_filecache_free_dirs(carousel->filecache->orphan_dirs);
+	dsmcc_filecache_free_files(carousel->filecache->orphan_files);
+	dsmcc_filecache_free_files(carousel->filecache->nameless_files);
 
-	free(car->filecache->downloadpath);
-	free(car->filecache);
-	car->filecache = NULL;
+	while (carousel->filecache->entries)
+	{
+		entrynext = carousel->filecache->entries->next;
+		free(carousel->filecache->entries->path);
+		free(carousel->filecache->entries->diskpath);
+		free(carousel->filecache->entries);
+		carousel->filecache->entries = entrynext;
+	}
+
+	free(carousel->filecache->downloadpath);
+
+	free(carousel->filecache);
+	carousel->filecache = NULL;
+}
+
+struct dsmcc_entry *dsmcc_filecache_find_entry(struct dsmcc_file_cache *filecache, const char *path)
+{
+	struct dsmcc_entry *entry = filecache->entries;
+	while (entry)
+	{
+		if (!strcmp(entry->path, path))
+			return entry;
+		entry = entry->next;
+	}
+	return NULL;
+}
+
+void dsmcc_filecache_add_entry(struct dsmcc_file_cache *filecache, const char *path, const char *diskpath)
+{
+	struct dsmcc_entry *entry;
+
+	DSMCC_DEBUG("Adding file entry %s (%s)", path, diskpath);
+
+	entry = calloc(1, sizeof(struct dsmcc_entry));
+	entry->path = strdup(path);
+	entry->diskpath = strdup(diskpath);
+
+	entry->next = filecache->entries;
+	if (entry->next)
+		entry->next->prev = entry;
+	filecache->entries = entry;
+}
+
+void dsmcc_filecache_reset(struct dsmcc_object_carousel *carousel)
+{
+	struct dsmcc_entry *entry = carousel->filecache->entries;
+	while (entry)
+	{
+		entry->marked = 1;
+		entry = entry->next;
+	}
+
+	dsmcc_filecache_free_dirs(carousel->filecache->gateway);
+	carousel->filecache->gateway = NULL;
+	dsmcc_filecache_free_dirs(carousel->filecache->orphan_dirs);
+	carousel->filecache->orphan_dirs = NULL;
+	dsmcc_filecache_free_files(carousel->filecache->orphan_files);
+	carousel->filecache->orphan_files = NULL;
+	dsmcc_filecache_free_files(carousel->filecache->nameless_files);
+	carousel->filecache->nameless_files = NULL;
+}
+
+void dsmcc_filecache_clean(struct dsmcc_object_carousel *carousel)
+{
+	struct dsmcc_entry *entry = carousel->filecache->entries;
+	while (entry)
+	{
+		if (entry->marked)
+		{
+			DSMCC_ERROR("Removing entry %s (%s)", entry->path, entry->diskpath);
+
+			unlink(entry->diskpath);
+
+			if (carousel->filecache->callback)
+				(*carousel->filecache->callback)(carousel->filecache->callback_arg, carousel->cid, DSMCC_CACHE_FILE, DSMCC_CACHE_DELETED, entry->path, entry->diskpath);
+
+			if (entry->prev)
+				entry->prev->next = entry->next;
+			else
+				carousel->filecache->entries = entry->next;
+			if (entry->next)
+				entry->next->prev = entry->prev;
+			free(entry->path);
+			free(entry->diskpath);
+			free(entry);
+		}
+		entry = entry->next;
+	}
 }
 
 static void dsmcc_filecache_add_file_to_list(struct dsmcc_cached_file **list_head, struct dsmcc_cached_file *file)
@@ -171,6 +252,18 @@ static void dsmcc_filecache_add_file_to_list(struct dsmcc_cached_file **list_hea
 	*list_head = file;
 }
 
+static void dsmcc_filecache_remove_file_from_list(struct dsmcc_cached_file **list_head, struct dsmcc_cached_file *file)
+{
+	if (file->prev)
+		file->prev->next = file->next;
+	else
+		*list_head = file->next;
+	if (file->next)
+		file->next->prev = file->prev;
+	file->prev = NULL;
+	file->next = NULL;
+}
+
 static void dsmcc_filecache_add_dir_to_list(struct dsmcc_cached_dir **list_head, struct dsmcc_cached_dir *dir)
 {
 	dir->next = *list_head;
@@ -180,39 +273,28 @@ static void dsmcc_filecache_add_dir_to_list(struct dsmcc_cached_dir **list_head,
 	*list_head = dir;
 }
 
-static void dsmcc_filecache_fill_id(struct dsmcc_entry_id *id, uint16_t module_id, uint32_t key_len, uint8_t *key)
+static void dsmcc_filecache_remove_dir_from_list(struct dsmcc_cached_dir **list_head, struct dsmcc_cached_dir *dir)
+{
+	if (dir->prev)
+		dir->prev->next = dir->next;
+	else
+		*list_head = dir->next;
+	if (dir->next)
+		dir->next->prev = dir->prev;
+	dir->prev = NULL;
+	dir->next = NULL;
+}
+
+static void dsmcc_filecache_fill_id(struct dsmcc_entry_id *id, uint16_t module_id, uint32_t key, uint32_t key_mask)
 {
 	id->module_id = module_id;
-	id->key_len = key_len;
-	if (id->key_len > 0)
-	{
-		id->key = malloc(id->key_len);
-		memcpy(id->key, key, id->key_len);
-	}
-	else
-		id->key = NULL;
+	id->key = key;
+	id->key_mask = key_mask;
 }
 
 static void dsmcc_filecache_copy_id(struct dsmcc_entry_id *dst, struct dsmcc_entry_id *src)
 {
-	dsmcc_filecache_fill_id(dst, src->module_id, src->key_len, src->key);
-}
-
-static void dsmcc_filecache_id_str(char *buffer, int buffersize, struct dsmcc_entry_id *id)
-{
-	int i;
-
-	snprintf(buffer, buffersize, "%hu:%d:", id->module_id, id->key_len);
-	i = strlen(buffer);
-	buffer += i;
-	buffersize -= i;
-
-	for (i = 0; i < id->key_len; i++)
-	{
-		snprintf(buffer, buffersize, "%02hhx", id->key[i]);
-		buffer += 2;
-		buffersize -= 2;
-	}
+	dsmcc_filecache_fill_id(dst, src->module_id, src->key, src->key_mask);
 }
 
 static int dsmcc_filecache_id_cmp(struct dsmcc_entry_id *id1, struct dsmcc_entry_id *id2)
@@ -220,10 +302,10 @@ static int dsmcc_filecache_id_cmp(struct dsmcc_entry_id *id1, struct dsmcc_entry
 	if (id1->module_id != id2->module_id)
 		return 0;
 
-	if (id1->key_len != id2->key_len)
+	if (id1->key_mask != id2->key_mask)
 		return 0;
 
-	return memcmp(id1->key, id2->key, id1->key_len) == 0;
+	return (id1->key & id1->key_mask) == (id2->key & id2->key_mask);
 }
 
 static struct dsmcc_cached_dir *dsmcc_filecache_find_dir_in_subdirs(struct dsmcc_cached_dir *parent, struct dsmcc_entry_id *id)
@@ -250,14 +332,7 @@ static struct dsmcc_cached_dir *dsmcc_filecache_find_dir_in_subdirs(struct dsmcc
 static void dsmcc_filecache_attach_orphan_file(struct dsmcc_file_cache *filecache, struct dsmcc_cached_dir *dir, struct dsmcc_cached_file *file)
 {
 	/* detach from orphan files */
-	if (file->prev)
-		file->prev->next = file->next;
-	else
-		filecache->orphan_files = file->next;
-	if (file->next)
-		file->next->prev = file->prev;
-	file->prev = NULL;
-	file->next = NULL;
+	dsmcc_filecache_remove_file_from_list(&filecache->orphan_files, file);
 
 	/* attach to dir */
 	file->parent = dir;
@@ -267,14 +342,7 @@ static void dsmcc_filecache_attach_orphan_file(struct dsmcc_file_cache *filecach
 static void dsmcc_filecache_attach_orphan_dir(struct dsmcc_file_cache *filecache, struct dsmcc_cached_dir *parent, struct dsmcc_cached_dir *dir)
 {
 	/* detach from orphan dirs */
-	if (dir->prev)
-		dir->prev->next = dir->next;
-	else
-		filecache->orphan_dirs = dir->next;
-	if (dir->next)
-		dir->next->prev = dir->prev;
-	dir->prev = NULL;
-	dir->next = NULL;
+	dsmcc_filecache_remove_dir_from_list(&filecache->orphan_dirs, dir);
 
 	/* attach to parent */
 	dir->parent = parent;
@@ -283,82 +351,33 @@ static void dsmcc_filecache_attach_orphan_dir(struct dsmcc_file_cache *filecache
 
 static void dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, struct dsmcc_cached_file *file)
 {
-	FILE *data_fd, *module_fd;
-	char fn[1024], dirpath[1024];
-	char data_buf[4096];
-	unsigned int copied, cp_size;
-	int rret, wret;
+	char *fn, *path;
+	int tmp;
 
-	if (file->parent && file->parent->dirpath)
+	if (!file->parent || !file->parent->path)
 	{
-		snprintf(dirpath, 1024, "%s/%s", file->parent->dirpath, file->filename);
-		snprintf(fn, 1024, "%s%s%s", filecache->downloadpath, dirpath[0] == '/' ? "" : "/", dirpath);
+		DSMCC_ERROR("Cannot write file %s, invalid parent: Parent == %p Parent Path == %s", file->name, file->parent, file->parent ? file->parent->path : NULL);
+		return;
+	}
 
-		if (filecache->callback)
-		{
-			int ok = (*filecache->callback)(filecache->callback_arg, filecache->carousel->cid, DSMCC_CACHE_FILE_CHECK, dirpath, fn);
-			if (!ok)
-			{
-				DSMCC_DEBUG("Not writing file %s as requested by callback", dirpath);
-				return;
-			}
-		}
+	tmp = strlen(file->parent->path) + strlen(file->name) + 2;
+	path = malloc(tmp);
+	tmp = snprintf(path, tmp, "%s/%s", file->parent->path, file->name);
 
-		DSMCC_DEBUG("Writing file %s to %s (%d bytes)", dirpath, fn, file->data_len);
+	tmp += strlen(filecache->downloadpath) + 2;
+	fn = malloc(tmp);
+	snprintf(fn, tmp, "%s%s%s", filecache->downloadpath, path[0] == '/' ? "" : "/", path);
 
-		module_fd = fopen(file->module_file, "r");
-		if (!module_fd)
-		{
-			DSMCC_DEBUG("Cached module file open error '%s': %s", file->module_file, strerror(errno));
-			return;
-		}
-	
-		if (fseek(module_fd, file->module_offset, SEEK_SET) < 0)
-		{
-			DSMCC_DEBUG("Cached module file seek error '%s': %s", file->module_file, strerror(errno));
-			fclose(module_fd);
-			return;
-		}
+	if (filecache->callback && !(*filecache->callback)(filecache->callback_arg, filecache->carousel->cid, DSMCC_CACHE_FILE, DSMCC_CACHE_CHECK, path, NULL))
+	{
+		DSMCC_DEBUG("Skipping file %s as requested", path);
+		goto cleanup;
+	}
 
-		data_fd = fopen(fn, "wb");
-		copied = 0;
-		int err = 0;
-		while (copied < file->data_len)
-		{
-			cp_size = file->data_len - copied > sizeof data_buf ? sizeof data_buf : file->data_len - copied;
-			rret = fread(data_buf, 1, cp_size, module_fd);
-			if (rret > 0)
-			{
-				wret = fwrite(data_buf, 1, rret, data_fd);
-				if (wret < rret)
-				{
-					if (wret < 0)
-						DSMCC_DEBUG("Write error '%s': %s", fn, strerror(errno));
-					else
-						DSMCC_DEBUG("Short write '%s'", fn);
-					err = 1;
-					break;
-				}
-				copied += wret;
-			}
-			else
-			{
-				if (rret < 0)
-					DSMCC_DEBUG("Read error '%s': %s", file->module_file, strerror(errno));
-				else
-					DSMCC_DEBUG("Unexpected EOF '%s'", file->module_file);
-				err = 1;
-				break;
-			}
-		}
-		fclose(module_fd);
-		fclose(data_fd);
-
-		if (err == 1)
-		{
-			unlink(fn);
-			return;
-		}
+	if (dsmcc_file_copy(fn, file->module_file, file->module_offset, file->data_len))
+	{
+		struct dsmcc_entry *entry;
+		int reason;
 
 		/* Free data as no longer needed */
 		file->module_offset = 0;
@@ -366,56 +385,84 @@ static void dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, struc
 		file->module_file = NULL;
 		file->data_len = 0;
 
+		entry = dsmcc_filecache_find_entry(filecache, path);
+		if (entry)
+		{
+			reason = DSMCC_CACHE_UPDATED;
+			entry->marked = 0;
+		}
+		else
+		{
+			reason = DSMCC_CACHE_CREATED;
+			dsmcc_filecache_add_entry(filecache, path, fn);
+		}
+
 		if (filecache->callback)
-			(*filecache->callback)(filecache->callback_arg, filecache->carousel->cid, DSMCC_CACHE_FILE_SAVED, dirpath, fn);
+			(*filecache->callback)(filecache->callback_arg, filecache->carousel->cid, DSMCC_CACHE_FILE, reason, path, fn);
 	}
-	else
-	{
-		DSMCC_DEBUG("File %s Parent == %p Parent_Dirpath == %s", file->filename, file->parent, file->parent ? file->parent->dirpath : NULL);
-	}
+
+cleanup:
+	free(fn);
+	free(path);
 }
 
 static void dsmcc_filecache_write_dir(struct dsmcc_file_cache *filecache, struct dsmcc_cached_dir *dir)
 {
 	struct dsmcc_cached_dir *subdir;
 	struct dsmcc_cached_file *file;
-	char dirbuf[1024];
+	char *dn;
+	int tmp;
 
-	if (!dir->dirpath)
+	if (!dir->path)
 	{
-		dir->dirpath = malloc(strlen(dir->parent->dirpath) + strlen(dir->name) + 2);
-		strcpy(dir->dirpath, dir->parent->dirpath);
-		strcat(dir->dirpath, "/");
-		strcat(dir->dirpath, dir->name);
+		tmp = strlen(dir->parent->path) + strlen(dir->name) + 2;
+		dir->path = malloc(tmp);
+		snprintf(dir->path, tmp, "%s/%s", dir->parent->path, dir->name);
 	}
 
-	snprintf(dirbuf, 1024, "%s/%s", filecache->downloadpath, dir->dirpath);
+	tmp = strlen(filecache->downloadpath) + strlen(dir->path) + 2;
+	dn = malloc(tmp);
+	snprintf(dn, tmp, "%s/%s", filecache->downloadpath, dir->path);
 
-	/* call callback (but not gateway) */
-	if (strlen(dir->name) > 0 && filecache->callback)
+	/* call callback (except for gateway) */
+	if (strlen(dir->name) > 0 && (filecache->callback && !(*filecache->callback)(filecache->callback_arg, filecache->carousel->cid, DSMCC_CACHE_DIR, DSMCC_CACHE_CHECK, dir->path, NULL)))
 	{
-		int ok = (*filecache->callback)(filecache->callback_arg, filecache->carousel->cid, DSMCC_CACHE_DIR_CHECK, dir->dirpath, dirbuf);
-		if (!ok)
+		DSMCC_DEBUG("Skipping directory %s as requested", dir->path);
+		goto end;
+	}
+
+	DSMCC_DEBUG("Writing directory %s to %s", dir->path, dn);
+
+	mkdir(dn, 0755); 
+
+	/* register and call callback (except for gateway) */
+	if (strlen(dir->name) > 0)
+	{
+		struct dsmcc_entry *entry;
+		int reason;
+
+		entry = dsmcc_filecache_find_entry(filecache, dir->path);
+		if (entry)
 		{
-			DSMCC_DEBUG("Not creating directory %s as requested by callback", dir->dirpath);
-			return;
+			reason = DSMCC_CACHE_UPDATED;
+			entry->marked = 0;
 		}
+		else
+		{
+			reason = DSMCC_CACHE_CREATED;
+			dsmcc_filecache_add_entry(filecache, dir->path, dn);
+		}
+
+		if (filecache->callback)
+			(*filecache->callback)(filecache->callback_arg, filecache->carousel->cid, DSMCC_CACHE_DIR, reason, dir->path, dn);
 	}
-
-	DSMCC_DEBUG("Writing directory %s to %s", dir->dirpath, dirbuf);
-
-	mkdir(dirbuf, 0755); 
-
-	/* call callback (but not gateway) */
-	if (strlen(dir->name) > 0 && filecache->callback)
-		(*filecache->callback)(filecache->callback_arg, filecache->carousel->cid, DSMCC_CACHE_DIR_SAVED, dir->dirpath, dirbuf);
 
 	/* Write out files that had arrived before directory */
 	for (file = dir->files; file; file = file->next)
 	{
 		if (file->module_offset != 0)
 		{
-			DSMCC_DEBUG("Writing out file %s under new dir %s", file->filename, dir->dirpath);
+			DSMCC_DEBUG("Writing out file %s under new dir %s", file->name, dir->path);
 			dsmcc_filecache_write_file(filecache, file);
 		}
 	}
@@ -423,6 +470,9 @@ static void dsmcc_filecache_write_dir(struct dsmcc_file_cache *filecache, struct
 	/* Recurse through child directories */
 	for (subdir = dir->sub; subdir; subdir = subdir->next)
 		dsmcc_filecache_write_dir(filecache, subdir);
+
+end:
+	free(dn);
 }
 
 static struct dsmcc_cached_dir *dsmcc_filecache_cached_dir_find(struct dsmcc_file_cache *filecache, struct dsmcc_entry_id *id)
@@ -430,22 +480,17 @@ static struct dsmcc_cached_dir *dsmcc_filecache_cached_dir_find(struct dsmcc_fil
 	struct dsmcc_cached_dir *dir, *dirnext;
 	struct dsmcc_cached_file *file, *filenext;
 
-	if (dsmcc_log_enabled(DSMCC_LOG_DEBUG))
-	{
-		char buffer[32];
-		dsmcc_filecache_id_str(buffer, 32, id);
-		DSMCC_DEBUG("Searching for dir %s", buffer);
-	}
+	DSMCC_DEBUG("Searching for dir 0x%04hx:0x%08x:0x%08x", id->module_id, id->key, id->key_mask);
 
 	/* Scan through known dirs and return details if known else NULL */
-	if (id->key_len == 0)
+	if (id->key_mask == 0)
 	{
 		/* Return gateway object. Create if not already */
 		if (filecache->gateway == NULL)
 		{
 			filecache->gateway = calloc(1, sizeof(struct dsmcc_cached_dir));
 			filecache->gateway->name = strdup("");
-			filecache->gateway->dirpath = strdup("");
+			filecache->gateway->path = strdup("");
 
 			/* Attach any subdirs or files that arrived prev. */
 
@@ -520,37 +565,32 @@ static struct dsmcc_cached_file *dsmcc_filecache_find_file(struct dsmcc_file_cac
 	return file;
 }
 
-void dsmcc_filecache_cache_dir_info(struct dsmcc_file_cache *filecache, uint16_t module_id, uint32_t objkey_len, uint8_t *objkey, struct biop_binding *binding)
+void dsmcc_filecache_cache_dir_info(struct dsmcc_file_cache *filecache, uint16_t module_id, uint32_t key, uint32_t key_mask, struct biop_binding *binding)
 {
 	struct dsmcc_entry_id tmpid;
 	struct dsmcc_cached_dir *dir, *subdir, *subdirnext;
 	struct dsmcc_cached_file *file, *filenext;
 
-	if (filecache->carousel->cid != binding->ior->profile_body.obj_loc.carousel_id)
+	if (filecache->carousel->cid != binding->ior.profile_body.obj_loc.carousel_id)
 	{
-		DSMCC_ERROR("Got a request to cache dir info for an invalid carousel %u (expected %u)", binding->ior->profile_body.obj_loc.carousel_id, filecache->carousel->cid);
+		DSMCC_ERROR("Got a request to cache dir info for an invalid carousel %u (expected %u)", binding->ior.profile_body.obj_loc.carousel_id, filecache->carousel->cid);
 		return;
 	}
 
-	tmpid.module_id = binding->ior->profile_body.obj_loc.module_id;
-	tmpid.key_len = binding->ior->profile_body.obj_loc.objkey_len;
-	tmpid.key = binding->ior->profile_body.obj_loc.objkey;
+	tmpid.module_id = binding->ior.profile_body.obj_loc.module_id;
+	tmpid.key = binding->ior.profile_body.obj_loc.key;
+	tmpid.key_mask = binding->ior.profile_body.obj_loc.key_mask;
 	dir = dsmcc_filecache_cached_dir_find(filecache, &tmpid);
 	if (dir)
 		return; /* Already got */
 
 	dir = calloc(1, sizeof(struct dsmcc_cached_dir));
-	dir->name = strdup(binding->name->id);
-	dsmcc_filecache_fill_id(&dir->id, binding->ior->profile_body.obj_loc.module_id, binding->ior->profile_body.obj_loc.objkey_len, binding->ior->profile_body.obj_loc.objkey);
-	dsmcc_filecache_fill_id(&dir->parent_id, module_id, objkey_len, objkey);
+	dir->name = strdup(binding->name.id);
+	dsmcc_filecache_fill_id(&dir->id, binding->ior.profile_body.obj_loc.module_id, binding->ior.profile_body.obj_loc.key, binding->ior.profile_body.obj_loc.key_mask);
+	dsmcc_filecache_fill_id(&dir->parent_id, module_id, key, key_mask);
 	dir->parent = dsmcc_filecache_cached_dir_find(filecache, &dir->parent_id);
 
-	if (dsmcc_log_enabled(DSMCC_LOG_DEBUG))
-	{
-		char buffer[32];
-		dsmcc_filecache_id_str(buffer, 32, &dir->parent_id);
-		DSMCC_DEBUG("Caching dir %s (with parent %s)", dir->name, buffer);
-	}
+	DSMCC_DEBUG("Caching dir %s with parent 0x%04hx:0x%08x:0x%08x", dir->name, dir->parent_id.module_id, dir->parent_id.key, dir->parent_id.key_mask);
 
 	if (!dir->parent)
 	{
@@ -569,7 +609,7 @@ void dsmcc_filecache_cache_dir_info(struct dsmcc_file_cache *filecache, uint16_t
 		filenext = file->next;
 		if (dsmcc_filecache_id_cmp(&file->parent_id, &dir->id))
 		{
-			DSMCC_DEBUG("Attaching previously arrived file %s to newly created directory %s", file->filename, dir->name);
+			DSMCC_DEBUG("Attaching previously arrived file %s to newly created directory %s", file->name, dir->name);
 			dsmcc_filecache_attach_orphan_file(filecache, dir, file);
 		}
 	}
@@ -585,18 +625,18 @@ void dsmcc_filecache_cache_dir_info(struct dsmcc_file_cache *filecache, uint16_t
 		}
 	}
 
-	if (dir->parent && dir->parent->dirpath)
+	if (dir->parent && dir->parent->path)
 		dsmcc_filecache_write_dir(filecache, dir); /* Write dir/files to filesystem */
 }
 
-void dsmcc_filecache_cache_file(struct dsmcc_file_cache *filecache, uint16_t module_id, uint8_t key_len, uint8_t *key, const char *module_file, int offset, int length)
+void dsmcc_filecache_cache_file(struct dsmcc_file_cache *filecache, uint16_t module_id, uint32_t key, uint32_t key_mask, const char *module_file, int offset, int length)
 {
 	struct dsmcc_cached_file *file;
 	struct dsmcc_entry_id tmpid;
 
 	tmpid.module_id = module_id;
-	tmpid.key_len = key_len;
 	tmpid.key = key;
+	tmpid.key_mask = key_mask;
 
 	/* search for file info */
 	file = dsmcc_filecache_find_file(filecache, &tmpid);
@@ -604,20 +644,15 @@ void dsmcc_filecache_cache_file(struct dsmcc_file_cache *filecache, uint16_t mod
 	{
 		/* Not known yet. Save data */
 
-		if (dsmcc_log_enabled(DSMCC_LOG_DEBUG))
-		{
-			char buffer[32];
-			dsmcc_filecache_id_str(buffer, 32, &tmpid);
-			DSMCC_DEBUG("Unknown file %s in carousel %u, caching data", buffer, filecache->carousel->cid);
-		}
+		DSMCC_DEBUG("Unknown file 0x%04x:0x%08x/0x%08x in carousel %u, caching data", tmpid.module_id, tmpid.key, tmpid.key_mask, filecache->carousel->cid);
 
 		file = calloc(1, sizeof(struct dsmcc_cached_file));
 		file->module_file = strdup(module_file);
 		file->module_offset = offset;
 		file->data_len = length;
-		dsmcc_filecache_fill_id(&file->id, module_id, key_len, key);
+		dsmcc_filecache_fill_id(&file->id, module_id, key, key_mask);
 
-		// Add to nameless files
+		/* Add to nameless files */
 		dsmcc_filecache_add_file_to_list(&filecache->nameless_files, file);
 	}
 	else
@@ -632,7 +667,7 @@ void dsmcc_filecache_cache_file(struct dsmcc_file_cache *filecache, uint16_t mod
 		}
 		else
 		{
-			DSMCC_DEBUG("Data for file %s had already been saved", file->filename);
+			DSMCC_DEBUG("Data for file %s had already been saved", file->name);
 		}
 	}
 }
@@ -665,52 +700,48 @@ static struct dsmcc_cached_file *dsmcc_filecache_find_file_data(struct dsmcc_fil
 	return last;
 }
 
-void dsmcc_filecache_cache_file_info(struct dsmcc_file_cache *filecache, uint16_t module_id, uint32_t key_len, uint8_t *key, struct biop_binding *binding)
+void dsmcc_filecache_cache_file_info(struct dsmcc_file_cache *filecache, uint16_t module_id, uint32_t key, uint32_t key_mask, struct biop_binding *binding)
 {
 	struct dsmcc_cached_file *newfile;
 	struct dsmcc_entry_id tmpid;
 
-	if (filecache->carousel->cid != binding->ior->profile_body.obj_loc.carousel_id)
+	if (filecache->carousel->cid != binding->ior.profile_body.obj_loc.carousel_id)
 	{
-		DSMCC_ERROR("Got a request to cache dir info for an invalid carousel %ld (expected %ld)", binding->ior->profile_body.obj_loc.carousel_id, filecache->carousel->cid);
+		DSMCC_ERROR("Got a request to cache dir info for an invalid carousel 0x%08x (expected 0x%08x)", binding->ior.profile_body.obj_loc.carousel_id, filecache->carousel->cid);
 		return;
 	}
 
-	tmpid.module_id = binding->ior->profile_body.obj_loc.module_id;
-	tmpid.key_len = binding->ior->profile_body.obj_loc.objkey_len;
-	tmpid.key = binding->ior->profile_body.obj_loc.objkey;
+	tmpid.module_id = binding->ior.profile_body.obj_loc.module_id;
+	tmpid.key = binding->ior.profile_body.obj_loc.key;
+	tmpid.key_mask = binding->ior.profile_body.obj_loc.key_mask;
 
-	// Check we do not already have file (or file info) cached 
+	/* Check we do not already have file (or file info) cached  */
 	if (dsmcc_filecache_find_file(filecache, &tmpid))
 		return;
 
-	// See if the data had already arrived for the file 
+	/* See if the data had already arrived for the file */
 	newfile = dsmcc_filecache_find_file_data(filecache, &tmpid);
 
 	if (!newfile)
 	{
-		// Create the file from scratch
-		DSMCC_DEBUG("Data not arrived for file %s, caching", binding->name->id);
+		/* Create the file from scratch */
+		DSMCC_DEBUG("Data not arrived for file %s, caching", binding->name.id);
 		newfile = calloc(1, sizeof(struct dsmcc_cached_file));
 		dsmcc_filecache_copy_id(&newfile->id, &tmpid);
 	}
 	else
 	{
-		DSMCC_DEBUG("Data already arrived for file %s", binding->name->id);
+		DSMCC_DEBUG("Data already arrived for file %s", binding->name.id);
 	}
 
-	dsmcc_filecache_fill_id(&newfile->parent_id, module_id, key_len, key);
-	newfile->filename = strdup(binding->name->id);
+	dsmcc_filecache_fill_id(&newfile->parent_id, module_id, key, key_mask);
+	newfile->name = strdup(binding->name.id);
 
 	newfile->parent = dsmcc_filecache_cached_dir_find(filecache, &newfile->parent_id);
 
-	if (dsmcc_log_enabled(DSMCC_LOG_DEBUG))
-	{
-		char buffer[32], buffer2[32];;
-		dsmcc_filecache_id_str(buffer, 32, &newfile->id);
-		dsmcc_filecache_id_str(buffer2, 32, &newfile->parent_id);
-		DSMCC_DEBUG("Caching info in carousel %u for file %s (%s) with %s parent dir %s", filecache->carousel->cid, newfile->filename, buffer, newfile->parent ? "known" : "unknown", buffer2);
-	}
+	DSMCC_DEBUG("Caching info in carousel %u for file %s (0x%04hx:0x%08x/0x%08x) with parent dir 0x%04hx:0x%08x/0x%08x",
+			filecache->carousel->cid, newfile->name, newfile->id.module_id, newfile->id.key, newfile->id.key_mask,
+			newfile->parent_id.module_id, newfile->parent_id.key, newfile->parent_id.key_mask);
 
 	if (!newfile->parent)
 	{

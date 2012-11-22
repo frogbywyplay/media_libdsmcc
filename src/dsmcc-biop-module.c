@@ -44,7 +44,7 @@ int dsmcc_biop_parse_module_info(struct biop_module_info *module_info, uint8_t *
 	if (!dsmcc_getbyte(&userinfo_len, data, off, data_length))
 		return -1;
 	off++;
-	DSMCC_DEBUG("UserInfo Len = %d", userinfo_len);
+	DSMCC_DEBUG("UserInfo Len = %hhu", userinfo_len);
 
 	if (userinfo_len > 0)
 	{

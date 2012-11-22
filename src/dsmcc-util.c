@@ -2,11 +2,17 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <sys/types.h>
 #include <sys/stat.h>
-#include "dsmcc-util.h"
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
 
-// CRC code taken from libdtv (Rolf Hakenes)
-// CRC32 lookup table for polynomial 0x04c11db7
+#include "dsmcc-util.h"
+#include "dsmcc-debug.h"
+
+/* CRC code taken from libdtv (Rolf Hakenes)    */
+/* CRC32 lookup table for polynomial 0x04c11db7 */
 static uint32_t crc_table[256] = {
 	0x00000000, 0x04c11db7, 0x09823b6e, 0x0d4326d9, 0x130476dc, 0x17c56b6b,
 	0x1a864db2, 0x1e475005, 0x2608edb8, 0x22c9f00f, 0x2f8ad6d6, 0x2b4bcb61,
@@ -85,4 +91,131 @@ void dsmcc_mkdir(const char *name, mode_t mode)
 			pos++;
 	} while (pos);
 	free(namecopy);
+}
+
+bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int length)
+{
+	int dst = -1, src = -1;
+	char *tmpfile;
+	char data_buf[4096];
+	int rsize, wsize, tmp, ret = 0;
+
+	tmp = strlen(dstfile) + 8;
+	tmpfile = malloc(tmp);
+	snprintf(tmpfile, tmp, "%s.XXXXXX", dstfile);
+
+	src = open(srcfile, O_RDONLY);
+	if (src < 0)
+	{
+		DSMCC_ERROR("Source file file open error '%s': %s", srcfile, strerror(errno));
+		goto cleanup;
+	}
+
+	if (lseek(src, offset, SEEK_SET) < 0)
+	{
+		DSMCC_ERROR("Source file seek error '%s': %s", srcfile, strerror(errno));
+		goto cleanup;
+	}
+
+	dst = mkstemp(tmpfile);
+	if (dst < 0)
+	{
+		DSMCC_ERROR("Destination file open error '%s': %s", tmpfile, strerror(errno));
+		goto cleanup;
+	}
+
+	DSMCC_DEBUG("Copying %d bytes from %s at offset %d to %s", length, srcfile, offset, tmpfile);
+
+	while (length > 0)
+	{
+		rsize = length;
+		if (rsize > sizeof data_buf)
+			rsize = sizeof data_buf;
+
+		rsize = read(src, data_buf, rsize);
+		if (rsize < 0)
+		{
+			DSMCC_ERROR("Read error '%s': %s", srcfile, strerror(errno));
+			break;
+		}
+		else if (rsize == 0)
+		{
+			DSMCC_ERROR("Unexpected EOF '%s'", srcfile);
+			break;
+		}
+		else
+		{
+			wsize = write(dst, data_buf, rsize);
+			if (wsize < 0)
+			{
+				DSMCC_ERROR("Write error '%s': %s", tmpfile, strerror(errno));
+				break;
+			}
+			else if (wsize < rsize)
+			{
+				DSMCC_ERROR("Short write '%s'", tmpfile);
+				break;
+			}
+			length -= wsize;
+		}
+	}
+
+	if (length > 0)
+	{
+		DSMCC_DEBUG("Error occurred, deleting %s", tmpfile);
+		unlink(tmpfile);
+		goto cleanup;
+	}
+	else
+	{
+		DSMCC_DEBUG("Renaming %s to %s", tmpfile, dstfile);
+		rename(tmpfile, dstfile);
+		ret = 1;
+	}
+
+cleanup:
+	if (dst > 0)
+		close(dst);
+	if (src > 0)
+		close(src);
+	free(tmpfile);
+
+	return ret;
+}
+
+bool dsmcc_file_write_block(const char *dstfile, int offset, uint8_t *data, int length)
+{
+	int fd;
+	ssize_t wret;
+
+	fd = open(dstfile, O_WRONLY | O_CREAT, 0660);
+	if (fd < 0)
+	{
+		DSMCC_ERROR("Can't open file for writing '%s': %s", dstfile, strerror(errno));
+		return 0;
+	}
+
+	if (lseek(fd, offset, SEEK_SET) < 0)
+	{
+		DSMCC_ERROR("Can't seek file '%s' : %s", dstfile, strerror(errno));
+		close(fd);
+		return 0;
+	}
+
+	wret = write(fd, data, length);
+	if (wret < 0)
+	{
+		DSMCC_ERROR("Write error to file '%s': %s", dstfile, strerror(errno));
+		close(fd);
+		return 0;
+	}
+	else if (wret < length)
+	{
+		DSMCC_ERROR("Partial write to file '%s': %d/%u", dstfile, wret, length);
+		close(fd);
+		return 0;
+	}
+
+	close(fd);
+	return 1;
 }

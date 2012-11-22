@@ -54,7 +54,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 
 	if (packet_length <= 0 || packet_length != 188)
 	{
-		DSMCC_WARN("Skipping packet: Invalid packet size (got %d, expected %d)", packet_length, 188);
+		DSMCC_WARN("Skipping packet: Invalid packet size (got %d, expected 188)", packet_length);
 		return;
 	}
 
@@ -125,6 +125,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 				if (pointer_field > 0)
 					memcpy(buf->data + buf->in_section, packet + 5, pointer_field);
 
+				DSMCC_DEBUG("Processing section data PID 0x%hx, buffer length %d", buf->pid, buf->in_section);
 				dsmcc_parse_section(state, pid, buf->data, buf->in_section);
 				
 				/* zero buffer ? */
@@ -174,7 +175,12 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 
 void dsmcc_tsparser_parse_buffered_sections(struct dsmcc_state *state, struct dsmcc_tsparser_buffer *buffers)
 {
-	struct dsmcc_tsparser_buffer *buf;
-	for (buf = buffers; buf != NULL; buf = buf->next)
-		dsmcc_parse_section(state, buf->pid, buf->data, buf->in_section);
+	while (buffers)
+	{
+		DSMCC_DEBUG("Processing section data PID 0x%hx, buffer length %d", buffers->pid, buffers->in_section);
+		dsmcc_parse_section(state, buffers->pid, buffers->data, buffers->in_section);
+		memset(buffers->data, 0xFF, DSMCC_TSPARSER_BUFFER_SIZE);
+		buffers->cont = -1;
+		buffers = buffers->next;
+	}
 }

@@ -92,31 +92,42 @@ void dsmcc_close(struct dsmcc_state *state);
  *  \{
  */
 
+/** Constants for the 'type' passed to the cache callback */
+enum
+{
+	/** Directory */
+	DSMCC_CACHE_DIR = 0,
+
+	/** File */
+	DSMCC_CACHE_FILE
+};
+
 /** Constants for the 'reason' passed to the cache callback */
 enum
 {
-	/** Check if a directory should be created */
-	DSMCC_CACHE_DIR_CHECK = 0,
+	/** Check if file/dir should be created */
+	DSMCC_CACHE_CHECK = 0,
 
-	/** Notification of directory creation */
-	DSMCC_CACHE_DIR_SAVED,
+	/** Notification of creation */
+	DSMCC_CACHE_CREATED,
 
-	/** Check if a file should be created */
-	DSMCC_CACHE_FILE_CHECK,
+	/** Notification of update */
+	DSMCC_CACHE_UPDATED,
 
-	/** Notification of file creation */
-	DSMCC_CACHE_FILE_SAVED
+	/** Notification of deletion */
+	DSMCC_CACHE_DELETED
 };
 
 /** \brief Callback called for each directory/file in the carousel
   * \param arg Opaque argument (passed as-is from the cache_callback_arg argument of dsmcc_add_carousel
   * \param cid the carousel ID
+  * \param type the object type (file or directory)
   * \param reason the reason
   * \param path the directory/file path in the carousel
   * \param fullpath the directory/file path on disk
   * \return 0/1 for *_CHECK reasons whether the directory/file should be created or skipped. The return value is not used for *_SAVED reasons.
   */
-typedef int (dsmcc_cache_callback_t)(void *arg, uint32_t cid, int reason, char *path, char *fullpath);
+typedef int (dsmcc_cache_callback_t)(void *arg, uint32_t cid, int type, int reason, const char *path, const char *fullpath);
 
 /** \brief Add a carousel to the list of carousels to be parsed
   * \param state the library state
@@ -125,8 +136,9 @@ typedef int (dsmcc_cache_callback_t)(void *arg, uint32_t cid, int reason, char *
   * \param downloadpath the directory where the carousel files will be downloaded
   * \param cache_callback the callback that will be called before/after each directory or file creation
   * \param cache_callback_arg this will be passed as-is as first argument to the callback
+  * \return 1 if no error occured, 0 otherwise
   */
-void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg);
+int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg);
 
 /** \} */ // end of 'control' group
 

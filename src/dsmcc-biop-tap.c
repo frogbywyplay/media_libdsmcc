@@ -49,7 +49,7 @@ int dsmcc_biop_parse_taps_keep_only_first(struct biop_tap **tap0, uint16_t tap0_
 	off++;
 	if (taps_count < 1)
 	{
-		DSMCC_ERROR("Invalid number of taps (got %hhd but expected at least %d)", taps_count, 1);
+		DSMCC_ERROR("Invalid number of taps (got %hhd but expected at least 1)", taps_count);
 		return -1;
 	}
 	DSMCC_DEBUG("Taps count = %hhd", taps_count);

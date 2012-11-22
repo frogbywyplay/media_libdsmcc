@@ -34,7 +34,7 @@ struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callba
 	return state;
 }
 
-struct dsmcc_stream *dsmcc_find_stream(struct dsmcc_state *state, uint16_t pid)
+static struct dsmcc_stream *dsmcc_stream_find_by_pid(struct dsmcc_state *state, uint16_t pid)
 {
 	struct dsmcc_stream *str;
 
@@ -47,7 +47,7 @@ struct dsmcc_stream *dsmcc_find_stream(struct dsmcc_state *state, uint16_t pid)
 	return str;
 }
 
-static struct dsmcc_stream *dsmcc_find_stream_by_assoc_tag(struct dsmcc_stream *streams, uint16_t assoc_tag)
+static struct dsmcc_stream *dsmcc_stream_find_by_assoc_tag(struct dsmcc_stream *streams, uint16_t assoc_tag)
 {
 	struct dsmcc_stream *str;
 	int i;
@@ -57,6 +57,45 @@ static struct dsmcc_stream *dsmcc_find_stream_by_assoc_tag(struct dsmcc_stream *
 		for (i = 0; i < str->assoc_tag_count; i++)
 			if (str->assoc_tags[i] == assoc_tag)
 				break;
+	}
+
+	return str;
+}
+
+struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, bool create_if_missing)
+{
+	struct dsmcc_stream *str;
+	uint16_t pid;
+
+	if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
+	{
+		str = dsmcc_stream_find_by_assoc_tag(state->streams, stream_selector);
+		if (str)
+			return str;
+
+		pid = (*state->stream_sub_callback)(state->stream_sub_callback_arg, stream_selector);
+	}
+	else if (stream_selector_type == DSMCC_STREAM_SELECTOR_PID)
+	{
+		pid = stream_selector;
+	}
+	else
+	{
+		DSMCC_ERROR("Unknown stream selector type %d", stream_selector_type);
+		return NULL;
+	}
+
+	str = dsmcc_stream_find_by_pid(state, pid);
+	if (!str)
+	{
+		DSMCC_DEBUG("Adding stream with pid 0x%hx", pid);
+
+		str = calloc(1, sizeof(struct dsmcc_stream));
+		str->pid = pid;
+		str->next = state->streams;
+		if (str->next)
+			str->next->prev = str;
+		state->streams = str;
 	}
 
 	return str;
@@ -79,6 +118,7 @@ void dsmcc_stream_add_assoc_tag(struct dsmcc_stream *stream, uint16_t assoc_tag)
 
 static void dsmcc_stream_queue_add_entry(struct dsmcc_stream *stream, struct dsmcc_queue_entry *entry)
 {
+	entry->stream = stream;
 	entry->prev = NULL;
 	entry->next = stream->queue;
 	if (entry->next)
@@ -89,48 +129,18 @@ static void dsmcc_stream_queue_add_entry(struct dsmcc_stream *stream, struct dsm
 void dsmcc_stream_queue_add(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, struct dsmcc_queue_entry *entry)
 {
 	struct dsmcc_stream *str;
-	uint16_t pid;
 
-	if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
+	str = dsmcc_stream_find(state, stream_selector_type, stream_selector, 1);
+	if (str)
 	{
-		str = dsmcc_find_stream_by_assoc_tag(state->streams, stream_selector);
-		if (str)
-		{
-			dsmcc_stream_queue_add_entry(str, entry);
-			return;
-		}
+		if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
+			dsmcc_stream_add_assoc_tag(str, stream_selector);
 
-		pid = (*state->stream_sub_callback)(state->stream_sub_callback_arg, stream_selector);
+		dsmcc_stream_queue_add_entry(str, entry);
 	}
-	else if (stream_selector_type == DSMCC_STREAM_SELECTOR_PID)
-	{
-		pid = stream_selector;
-	}
-	else
-	{
-		DSMCC_ERROR("Unknown stream selector type %d", stream_selector_type);
-		return;
-	}
-
-	str = dsmcc_find_stream(state, pid);
-	if (!str)
-	{
-		DSMCC_DEBUG("Adding stream with pid 0x%hx", pid);
-
-		str = calloc(1, sizeof(struct dsmcc_stream));
-		str->pid = pid;
-		str->next = state->streams;
-		if (str->next)
-			str->next->prev = str;
-		state->streams = str;
-	}
-
-	if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
-		dsmcc_stream_add_assoc_tag(str, stream_selector);
-	dsmcc_stream_queue_add_entry(str, entry);
 }
 
-struct dsmcc_queue_entry *dsmcc_stream_find_queue_entry(struct dsmcc_stream *stream, int type, uint32_t id)
+struct dsmcc_queue_entry *dsmcc_stream_queue_find_entry(struct dsmcc_stream *stream, int type, uint32_t id)
 {
 	struct dsmcc_queue_entry *entry = stream->queue;
 
@@ -149,7 +159,37 @@ struct dsmcc_queue_entry *dsmcc_stream_find_queue_entry(struct dsmcc_stream *str
 	return entry;
 }
 
-static void dsmcc_free_queue_entries(struct dsmcc_queue_entry *entry)
+struct dsmcc_queue_entry *dsmcc_stream_queue_find_entry_by_carousel(struct dsmcc_state *state, struct dsmcc_object_carousel *carousel, int type)
+{
+	struct dsmcc_stream *stream;
+	struct dsmcc_queue_entry *entry;
+
+	stream = state->streams;
+	while (stream)
+	{
+		entry = stream->queue;
+		while (entry)
+		{
+			if (entry->carousel == carousel && entry->type == type)
+				return entry;
+			entry = entry->next;
+		}
+		stream = stream->next;
+	}
+	return NULL;
+}
+
+void dsmcc_stream_queue_remove_entry(struct dsmcc_queue_entry *entry)
+{
+	if (entry->prev)
+		entry->prev->next = entry->next;
+	else
+		entry->stream->queue = entry->next;
+	entry->next->prev = entry->prev;
+	free(entry);
+}
+
+static void dsmcc_stream_queue_free_entries(struct dsmcc_queue_entry *entry)
 {
 	while (entry)
 	{
@@ -159,14 +199,14 @@ static void dsmcc_free_queue_entries(struct dsmcc_queue_entry *entry)
 	}
 }
 
-static void dsmcc_free_streams(struct dsmcc_stream *stream)
+static void dsmcc_stream_free_all(struct dsmcc_stream *stream)
 {
 	while (stream)
 	{
 		struct dsmcc_stream *next = stream->next;
 		if (stream->assoc_tags)
 			free(stream->assoc_tags);
-		dsmcc_free_queue_entries(stream->queue);
+		dsmcc_stream_queue_free_entries(stream->queue);
 		free(stream);
 		stream = next;
 	}
@@ -180,7 +220,7 @@ void dsmcc_close(struct dsmcc_state *state)
 	dsmcc_object_carousel_free_all(state->carousels);
 	state->carousels = NULL;
 
-	dsmcc_free_streams(state->streams);
+	dsmcc_stream_free_all(state->streams);
 	state->streams = NULL;
 
 	free(state->tmpdir);
