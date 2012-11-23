@@ -10,14 +10,12 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 {
 	struct dsmcc_object_carousel *car;
 	struct dsmcc_stream *stream;
-	struct dsmcc_queue_entry *entry;
 
 	/* Check that carousel is not already requested */
 	stream = dsmcc_stream_find(state, DSMCC_STREAM_SELECTOR_PID, pid, 0);
 	if (stream)
 	{
-		entry = dsmcc_stream_queue_find_entry(stream, DSMCC_QUEUE_ENTRY_DSI, transaction_id);
-		if (entry)
+		if (dsmcc_stream_queue_find(stream, DSMCC_QUEUE_ENTRY_DSI, transaction_id))
 		{
 			DSMCC_ERROR("Carousel on PID 0x%hx with Transaction ID 0x%x already requested", pid, transaction_id);
 			return 0;
@@ -30,11 +28,7 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 	car->next = state->carousels;
 	state->carousels = car;
 
-	entry = calloc(1, sizeof(struct dsmcc_queue_entry));
-	entry->carousel = car;
-	entry->type = DSMCC_QUEUE_ENTRY_DSI;
-	entry->id = transaction_id;
-	dsmcc_stream_queue_add(state, DSMCC_STREAM_SELECTOR_PID, pid, entry);
+	dsmcc_stream_queue_add(car, DSMCC_STREAM_SELECTOR_PID, pid, DSMCC_QUEUE_ENTRY_DSI, transaction_id);
 
 	return 1;
 }

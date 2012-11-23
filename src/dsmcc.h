@@ -13,16 +13,6 @@ enum
 	DSMCC_QUEUE_ENTRY_DDB
 };
 
-struct dsmcc_queue_entry
-{
-	struct dsmcc_stream          *stream;
-	struct dsmcc_object_carousel *carousel;
-	int                           type;
-	uint32_t                      id; /* DSI: transaction ID (optional) / DII: transaction ID / DDB: download ID */
-
-	struct dsmcc_queue_entry *next, *prev;
-};
-
 enum
 {
 	DSMCC_STREAM_SELECTOR_PID,
@@ -59,9 +49,9 @@ struct dsmcc_state
 };
 
 struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, bool create_if_missing);
-void dsmcc_stream_queue_add(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, struct dsmcc_queue_entry *entry);
-struct dsmcc_queue_entry *dsmcc_stream_queue_find_entry(struct dsmcc_stream *stream, int type, uint32_t id);
-struct dsmcc_queue_entry *dsmcc_stream_queue_find_entry_by_carousel(struct dsmcc_state *state, struct dsmcc_object_carousel *carousel, int type);
-void dsmcc_stream_queue_remove_entry(struct dsmcc_queue_entry *entry);
+
+struct dsmcc_object_carousel *dsmcc_stream_queue_find(struct dsmcc_stream *stream, int type, uint32_t id);
+void dsmcc_stream_queue_add(struct dsmcc_object_carousel *carousel, int stream_selector_type, uint16_t stream_selector, int type, uint32_t id);
+void dsmcc_stream_queue_remove(struct dsmcc_object_carousel *carousel, int type);
 
 #endif

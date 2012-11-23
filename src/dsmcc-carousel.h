@@ -10,7 +10,7 @@ struct dsmcc_object_carousel
 
 	uint32_t dsi_transaction_id;
 	uint32_t dii_transaction_id;
-	uint32_t ddb_download_id;
+	uint32_t download_id;
 
 	struct dsmcc_cached_module *modules;
 

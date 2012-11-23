@@ -8,7 +8,15 @@
 #include "dsmcc-util.h"
 #include "dsmcc-carousel.h"
 
-/* Init library and return new state struct */
+struct dsmcc_queue_entry
+{
+	struct dsmcc_stream          *stream;
+	struct dsmcc_object_carousel *carousel;
+	int                           type;
+	uint32_t                      id; /* DSI: transaction ID (optional) / DII: transaction ID / DDB: download ID */
+
+	struct dsmcc_queue_entry *next, *prev;
+};
 
 struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callback_t *stream_sub_callback, void *stream_sub_callback_arg)
 {
@@ -62,6 +70,21 @@ static struct dsmcc_stream *dsmcc_stream_find_by_assoc_tag(struct dsmcc_stream *
 	return str;
 }
 
+void dsmcc_stream_add_assoc_tag(struct dsmcc_stream *stream, uint16_t assoc_tag)
+{
+	int i;
+
+	for (i = 0; i < stream->assoc_tag_count; i++)
+		if (stream->assoc_tags[i] == assoc_tag)
+			return;
+
+	stream->assoc_tag_count++;
+	stream->assoc_tags = realloc(stream->assoc_tags, stream->assoc_tag_count * sizeof(*stream->assoc_tags));
+	stream->assoc_tags[stream->assoc_tag_count - 1] = assoc_tag;
+
+	DSMCC_DEBUG("Added assoc_tag 0x%hx to stream with pid 0x%hx", assoc_tag, stream->pid);
+}
+
 struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, bool create_if_missing)
 {
 	struct dsmcc_stream *str;
@@ -98,49 +121,38 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 		state->streams = str;
 	}
 
+	if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
+		dsmcc_stream_add_assoc_tag(str, stream_selector);
+
 	return str;
 }
 
-void dsmcc_stream_add_assoc_tag(struct dsmcc_stream *stream, uint16_t assoc_tag)
-{
-	int i;
-
-	for (i = 0; i < stream->assoc_tag_count; i++)
-		if (stream->assoc_tags[i] == assoc_tag)
-			return;
-
-	stream->assoc_tag_count++;
-	stream->assoc_tags = realloc(stream->assoc_tags, stream->assoc_tag_count * sizeof(*stream->assoc_tags));
-	stream->assoc_tags[stream->assoc_tag_count - 1] = assoc_tag;
-
-	DSMCC_DEBUG("Added assoc_tag 0x%hx to stream with pid 0x%hx", assoc_tag, stream->pid);
-}
-
-static void dsmcc_stream_queue_add_entry(struct dsmcc_stream *stream, struct dsmcc_queue_entry *entry)
-{
-	entry->stream = stream;
-	entry->prev = NULL;
-	entry->next = stream->queue;
-	if (entry->next)
-		entry->next->prev = entry;
-	stream->queue = entry;
-}
-
-void dsmcc_stream_queue_add(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, struct dsmcc_queue_entry *entry)
+void dsmcc_stream_queue_add(struct dsmcc_object_carousel *carousel, int stream_selector_type, uint16_t stream_selector, int type, uint32_t id)
 {
 	struct dsmcc_stream *str;
+	struct dsmcc_queue_entry *entry;
 
-	str = dsmcc_stream_find(state, stream_selector_type, stream_selector, 1);
+	str = dsmcc_stream_find(carousel->state, stream_selector_type, stream_selector, 1);
 	if (str)
 	{
-		if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
-			dsmcc_stream_add_assoc_tag(str, stream_selector);
+		if (dsmcc_stream_queue_find(str, type, id))
+			return;
 
-		dsmcc_stream_queue_add_entry(str, entry);
+		entry = calloc(1, sizeof(struct dsmcc_queue_entry));
+		entry->stream = str;
+		entry->carousel = carousel;
+		entry->type = type;
+		entry->id = id;
+
+		entry->prev = NULL;
+		entry->next = str->queue;
+		if (entry->next)
+			entry->next->prev = entry;
+		str->queue = entry;
 	}
 }
 
-struct dsmcc_queue_entry *dsmcc_stream_queue_find_entry(struct dsmcc_stream *stream, int type, uint32_t id)
+struct dsmcc_object_carousel *dsmcc_stream_queue_find(struct dsmcc_stream *stream, int type, uint32_t id)
 {
 	struct dsmcc_queue_entry *entry = stream->queue;
 
@@ -156,37 +168,37 @@ struct dsmcc_queue_entry *dsmcc_stream_queue_find_entry(struct dsmcc_stream *str
 		entry = entry->next;
 	}
 
-	return entry;
+	if (entry)
+		return entry->carousel;
+	return NULL;
 }
 
-struct dsmcc_queue_entry *dsmcc_stream_queue_find_entry_by_carousel(struct dsmcc_state *state, struct dsmcc_object_carousel *carousel, int type)
+void dsmcc_stream_queue_remove(struct dsmcc_object_carousel *carousel, int type)
 {
 	struct dsmcc_stream *stream;
 	struct dsmcc_queue_entry *entry;
 
-	stream = state->streams;
+	stream = carousel->state->streams;
 	while (stream)
 	{
 		entry = stream->queue;
 		while (entry)
 		{
 			if (entry->carousel == carousel && entry->type == type)
-				return entry;
+			{
+				if (entry->prev)
+					entry->prev->next = entry->next;
+				else
+					entry->stream->queue = entry->next;
+				entry->next->prev = entry->prev;
+				free(entry);
+
+				return;
+			}
 			entry = entry->next;
 		}
 		stream = stream->next;
 	}
-	return NULL;
-}
-
-void dsmcc_stream_queue_remove_entry(struct dsmcc_queue_entry *entry)
-{
-	if (entry->prev)
-		entry->prev->next = entry->next;
-	else
-		entry->stream->queue = entry->next;
-	entry->next->prev = entry->prev;
-	free(entry);
 }
 
 static void dsmcc_stream_queue_free_entries(struct dsmcc_queue_entry *entry)

@@ -200,7 +200,6 @@ static int dsmcc_parse_section_dsi(struct dsmcc_state *state, struct dsmcc_objec
         int off = 0, ret;
 	uint16_t i, dsi_data_length;
 	struct biop_ior gateway_ior;
-	struct dsmcc_queue_entry *entry;
 
 	/* skip unused Server ID */
 	/* 0-19 Server id = 20 * 0xFF */
@@ -242,9 +241,7 @@ static int dsmcc_parse_section_dsi(struct dsmcc_state *state, struct dsmcc_objec
 			return -1;
 		}
 
-		entry = dsmcc_stream_queue_find_entry_by_carousel(state, carousel, DSMCC_QUEUE_ENTRY_DII);
-		if (entry)
-			dsmcc_stream_queue_remove_entry(entry);
+		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DII);
 	}
 	else
 	{
@@ -253,11 +250,9 @@ static int dsmcc_parse_section_dsi(struct dsmcc_state *state, struct dsmcc_objec
 	}
 
 	/* Queue entry for DII */
-	entry = calloc(1, sizeof(struct dsmcc_queue_entry));
-	entry->carousel = carousel;
-	entry->type = DSMCC_QUEUE_ENTRY_DII;
-	entry->id = gateway_ior.profile_body.conn_binder.transaction_id;
-	dsmcc_stream_queue_add(state, DSMCC_STREAM_SELECTOR_ASSOC_TAG, gateway_ior.profile_body.conn_binder.assoc_tag, entry);
+	dsmcc_stream_queue_add(carousel,
+			DSMCC_STREAM_SELECTOR_ASSOC_TAG, gateway_ior.profile_body.conn_binder.assoc_tag,
+			DSMCC_QUEUE_ENTRY_DII, gateway_ior.profile_body.conn_binder.transaction_id);
 
 	return off;
 }
@@ -272,6 +267,7 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 	uint32_t download_id;
 	uint16_t block_size;
 	struct dsmcc_cached_module_info *modules;
+	uint16_t *assoc_tags;
 
 	if (!dsmcc_getlong(&download_id, data, off, data_length))
 		return -1;
@@ -302,6 +298,7 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 	DSMCC_DEBUG("DII: Number of modules %hu", number_modules);
 
 	modules = calloc(number_modules, sizeof(struct dsmcc_cached_module_info));
+	assoc_tags = calloc(number_modules, sizeof(uint16_t));
 	for (i = 0; i < number_modules; i++)
 	{
 		struct biop_module_info *bmi;
@@ -335,7 +332,7 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 		}
 		off += module_info_length;
 
-		modules[i].ddb_assoc_tag = bmi->assoc_tag;
+		assoc_tags[i] = bmi->assoc_tag;
 		desc = dsmcc_find_descriptor_by_type(bmi->descriptors, DSMCC_DESCRIPTOR_COMPRESSED);
 		if (desc)
 		{
@@ -349,29 +346,39 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 
 	/* skip private_data */
 	if (!dsmcc_getshort(&i, data, off, data_length))
-		return -1;
+		goto error;
 	off += 2;
 	DSMCC_DEBUG("DII: Private Data Length %hhu", i);
 	off += i;
 
 	/* remove previous modules and files if a previous DII was processed */
-	if (carousel->ddb_download_id != download_id)
+	if (carousel->download_id != download_id)
 	{
+		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
 		dsmcc_cached_module_free_all(carousel);
 		dsmcc_filecache_reset(carousel);
 	}
 
 	/* add modules info to module cache */
 	for (i = 0; i < number_modules; i++)
+	{
 		dsmcc_cached_module_add_info(state, carousel, &modules[i]);
-	free(modules);
 
-	carousel->ddb_download_id = download_id;
+		/* Queue entry for DDBs */
+		dsmcc_stream_queue_add(carousel,
+				DSMCC_STREAM_SELECTOR_ASSOC_TAG, assoc_tags[i],
+				DSMCC_QUEUE_ENTRY_DDB, download_id);
+	}
+	free(modules);
+	free(assoc_tags);
+
+	carousel->download_id = download_id;
 
 	return off;
 
 error:
 	free(modules);
+	free(assoc_tags);
 	return -1;
 }
 
@@ -379,7 +386,7 @@ static int dsmcc_parse_section_control(struct dsmcc_state *state, struct dsmcc_s
 {
 	struct dsmcc_message_header header;
 	int off = 0, ret;
-	struct dsmcc_queue_entry *entry;
+	struct dsmcc_object_carousel *carousel;
 
 	ret = dsmcc_parse_message_header(&header, data, data_length);
 	if (ret < 0)
@@ -390,15 +397,15 @@ static int dsmcc_parse_section_control(struct dsmcc_state *state, struct dsmcc_s
 	{
 		case 0x1006:
 			DSMCC_DEBUG("Processing Download-ServerInitiate message for stream with PID 0x%hx", stream->pid);
-			entry = dsmcc_stream_queue_find_entry(stream, DSMCC_QUEUE_ENTRY_DSI, header.transaction_id);
-			if (entry)
+			carousel = dsmcc_stream_queue_find(stream, DSMCC_QUEUE_ENTRY_DSI, header.transaction_id);
+			if (carousel)
 			{
-				if (entry->carousel->dsi_transaction_id != header.transaction_id)
+				if (carousel->dsi_transaction_id != header.transaction_id)
 				{
-					ret = dsmcc_parse_section_dsi(state, entry->carousel, data + off, data_length - off);
+					ret = dsmcc_parse_section_dsi(state, carousel, data + off, data_length - off);
 					if (ret < 0)
 						return -1;
-					entry->carousel->dsi_transaction_id = header.transaction_id;
+					carousel->dsi_transaction_id = header.transaction_id;
 				}
 				else
 					DSMCC_DEBUG("Ignoring duplicate DSI with Transaction ID 0x%x", header.transaction_id);
@@ -408,15 +415,15 @@ static int dsmcc_parse_section_control(struct dsmcc_state *state, struct dsmcc_s
 			break;
 		case 0x1002:
 			DSMCC_DEBUG("Processing Download-InfoIndication message for stream with PID 0x%hx", stream->pid);
-			entry = dsmcc_stream_queue_find_entry(stream, DSMCC_QUEUE_ENTRY_DII, header.transaction_id);
-			if (entry)
+			carousel = dsmcc_stream_queue_find(stream, DSMCC_QUEUE_ENTRY_DII, header.transaction_id);
+			if (carousel)
 			{
-				if (entry->carousel->dii_transaction_id != header.transaction_id)
+				if (carousel->dii_transaction_id != header.transaction_id)
 				{
-					ret = dsmcc_parse_section_dii(state, entry->carousel, data + off, data_length - off);
+					ret = dsmcc_parse_section_dii(state, carousel, data + off, data_length - off);
 					if (ret < 0)
 						return -1;
-					entry->carousel->dii_transaction_id = header.transaction_id;
+					carousel->dii_transaction_id = header.transaction_id;
 				}
 				else
 					DSMCC_DEBUG("Ignoring duplicate DII with Transaction ID 0x%x", header.transaction_id);
@@ -529,7 +536,7 @@ static int dsmcc_parse_section_ddb(struct dsmcc_state *state, struct dsmcc_objec
 	dsmcc_cached_module_save_data(carousel, &ddb, data + off, data_length - off);
 	off += ddb.length;
 
-	if (dsmcc_cached_module_is_complete(carousel))
+	if (dsmcc_cached_modules_are_complete(carousel))
 	{
 		DSMCC_DEBUG("Carousel 0x%08x is complete!", carousel->cid);
 		dsmcc_filecache_clean(carousel);
@@ -542,7 +549,7 @@ static int dsmcc_parse_section_data(struct dsmcc_state *state, struct dsmcc_stre
 {
 	struct dsmcc_data_header header;
 	int off = 0, ret;
-	struct dsmcc_queue_entry *entry;
+	struct dsmcc_object_carousel *carousel;
 
 	DSMCC_DEBUG("Parsing DDB section for stream with PID 0x%hx", stream->pid);
 
@@ -551,10 +558,10 @@ static int dsmcc_parse_section_data(struct dsmcc_state *state, struct dsmcc_stre
 		return -1;
 	off += ret;
 
-	entry = dsmcc_stream_queue_find_entry(stream, DSMCC_QUEUE_ENTRY_DDB, header.download_id);
-	if (entry)
+	carousel = dsmcc_stream_queue_find(stream, DSMCC_QUEUE_ENTRY_DDB, header.download_id);
+	if (carousel)
 	{
-		ret = dsmcc_parse_section_ddb(state, entry->carousel, &header, data + off, data_length - off);
+		ret = dsmcc_parse_section_ddb(state, carousel, &header, data + off, data_length - off);
 		if (ret < 0)
 			return -1;
 	}
