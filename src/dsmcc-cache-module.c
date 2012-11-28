@@ -9,6 +9,7 @@
 #include "dsmcc.h"
 #include "dsmcc-cache-module.h"
 #include "dsmcc-carousel.h"
+#include "dsmcc-compress.h"
 #include "dsmcc-debug.h"
 #include "dsmcc-util.h"
 #include "dsmcc-section.h"
@@ -72,13 +73,17 @@ static void dsmcc_process_cached_module(struct dsmcc_object_carousel *carousel, 
 
 	if (module->info.compressed)
 	{
-		DSMCC_DEBUG("Cannot process compressed module data (Compression disabled)");
-		/* TODO implement compression */
+		DSMCC_DEBUG("Processing compressed module data");
+		if (!dsmcc_inflate_file(module->data_file))
+		{
+			DSMCC_ERROR("Error while processing compressed module");
+			return;
+		}
+		dsmcc_biop_parse_data(carousel->filecache, module->info.module_id, module->data_file, module->info.uncompressed_size);
 	}
 	else
 	{
-		/* not compressed */
-		DSMCC_DEBUG("Processing module data (uncompressed)");
+		DSMCC_DEBUG("Processing uncompressed module data");
 		dsmcc_biop_parse_data(carousel->filecache, module->info.module_id, module->data_file, module->info.module_size);
 	}
 }

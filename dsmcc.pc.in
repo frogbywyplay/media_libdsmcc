@@ -7,5 +7,5 @@ Name: @PACKAGE_NAME@
 Description: This library provides an implementation of the DSM-CC Object Carousel specification
 Requires: @REQUIRED_PKG_CONFIG@
 Version: @VERSION@
-Libs: -L${libdir} -ldsmcc
+Libs: -L${libdir} -ldsmcc @ZLIB_LIBS@
 Cflags: -I${includedir}

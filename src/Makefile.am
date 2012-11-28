@@ -1,4 +1,7 @@
 lib_LTLIBRARIES = libdsmcc.la
+
+libdsmcc_la_LIBADD =
+
 libdsmcc_la_SOURCES = \
 	dsmcc-biop-ior.c \
 	dsmcc-biop-tap.c \
@@ -13,6 +16,7 @@ libdsmcc_la_SOURCES = \
 	dsmcc-util.c \
 	dsmcc-cache-file.c \
 	dsmcc-carousel.c
+
 noinst_HEADERS = \
 	dsmcc-biop-ior.h \
 	dsmcc-biop-message.h \
@@ -22,12 +26,19 @@ noinst_HEADERS = \
 	dsmcc-cache-module.h \
 	dsmcc-carousel.h \
 	dsmcc-config.h \
+	dsmcc-compress.h \
 	dsmcc-debug.h \
 	dsmcc-descriptor.h \
 	dsmcc.h \
 	dsmcc-section.h \
 	dsmcc-ts.h \
 	dsmcc-util.h
+
+if HAVE_ZLIB
+libdsmcc_la_LIBADD += -lz
+libdsmcc_la_SOURCES += \
+	dsmcc-compress.c
+endif
 
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \

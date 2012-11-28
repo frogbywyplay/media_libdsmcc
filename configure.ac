@@ -32,6 +32,32 @@ AC_DEFUN([MY_ARG_WITH],
             ]
         )
 
+######## zlib ########
+AC_ARG_ENABLE(zlib,
+   AC_HELP_STRING([--enable-zlib], [turn on zlib decompression support (default=enabled)]),
+   [
+      if test x$enableval == xyes ; then
+         zlib=true
+      else
+         zlib=false
+      fi
+   ],
+   [ zlib=true ]
+)
+
+if test x$zlib == xtrue ; then
+   AC_CHECK_HEADER([zlib.h], [], [ AC_MSG_ERROR([Could not find zlib header file]) ])
+   AC_CHECK_LIB([z], [deflate], [ enable_zlib=yes ], [ AC_MSG_ERROR([Could not find zlib library]) ] )
+fi
+if test x$enable_zlib == xyes ; then
+   AM_CONDITIONAL([HAVE_ZLIB], true)
+   AC_DEFINE([HAVE_ZLIB], 1, [Support for zlib compression])
+   AC_SUBST([ZLIB_LIBS], "-lz")
+else
+   AM_CONDITIONAL([HAVE_ZLIB], false)
+   AC_SUBST([ZLIB_LIBS], [])
+fi
+
 ######## Debugging ########
 AH_TEMPLATE([DEBUG], [Support for debugging.])
 
@@ -47,12 +73,12 @@ AC_ARG_ENABLE(debug,
    [ debug=false ]
 )
 if test x$debug == xtrue ; then
-   AM_CONDITIONAL(DEBUG, true)
+   AM_CONDITIONAL([DEBUG], true)
    AC_DEFINE([DEBUG])
    CFLAGS="$CFLAGS -g -ggdb -W -Wall -Werror"
    CXXFLAGS=$CFLAGS
 else
-   AM_CONDITIONAL(DEBUG, false)
+   AM_CONDITIONAL([DEBUG], false)
    CFLAGS="$CFLAGS -W -Wall -Werror -DNDEBUG"
    CXXFLAGS=$CFLAGS
 fi
@@ -66,6 +92,7 @@ AC_CONFIG_FILES([ Makefile Doxyfile include/Makefile src/Makefile tools/Makefile
 ######## Summary of configured options  ########
 AC_MSG_NOTICE([***** Summary *****])
 AC_MSG_NOTICE([DSMCC DEBUG          : $debug])
+AC_MSG_NOTICE([DSMCC ZLIB           : $zlib])
 
 AC_OUTPUT
 
