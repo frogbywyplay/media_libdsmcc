@@ -5,8 +5,7 @@ AC_PREREQ(2.60)
 AC_INIT([dsmcc], [2.0.0], [dev@wyplay.com])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src],[tools])
-#AC_CONFIG_HEADERS([include/dsmcc/config.h])
-
+AC_CONFIG_HEADERS([src/dsmcc-config.h])
 
 # Checks for programs.
 AC_PROG_CC
@@ -37,26 +36,26 @@ AC_DEFUN([MY_ARG_WITH],
 AH_TEMPLATE([DEBUG], [Support for debugging.])
 
 AC_ARG_ENABLE(debug,
-     AC_HELP_STRING([--enable-debug],
-	            [turn on debugging (default=disabled)]),
-     [
+   AC_HELP_STRING([--enable-debug], [turn on debugging (default=disabled)]),
+   [
       if test x$enableval == xyes ; then
-	      AC_DEFINE([DEBUG])
-		  CFLAGS="$CFLAGS -g -ggdb -W -Wall -Werror"
-	      CXXFLAGS=$CFLAGS
-	      debug=true
+         debug=true
       else
-    	  CFLAGS="$CFLAGS -W -Wall -Werror -DNDEBUG"
-	      CXXFLAGS=$CFLAGS
-	      debug=false
+         debug=false
       fi
-     ],
-     [
-      CFLAGS="$CFLAGS -Wall"
-      CXXFLAGS=$CFLAGS
-      debug=false
-     ])
-AM_CONDITIONAL(DEBUG, test x$debug != xfalse)
+   ],
+   [ debug=false ]
+)
+if test x$debug == xtrue ; then
+   AM_CONDITIONAL(DEBUG, true)
+   AC_DEFINE([DEBUG])
+   CFLAGS="$CFLAGS -g -ggdb -W -Wall -Werror"
+   CXXFLAGS=$CFLAGS
+else
+   AM_CONDITIONAL(DEBUG, false)
+   CFLAGS="$CFLAGS -W -Wall -Werror -DNDEBUG"
+   CXXFLAGS=$CFLAGS
+fi
 
 ######## Add input files ########
 

@@ -137,9 +137,13 @@ void dsmcc_cached_module_add_info(struct dsmcc_state *state, struct dsmcc_object
 void dsmcc_cached_module_save_data(struct dsmcc_object_carousel *carousel, struct dsmcc_ddb *ddb, uint8_t *data, int data_length)
 {
 	struct dsmcc_cached_module *module = NULL;
-	int length;
+	uint32_t length;
 
-	/* Scan through known modules and append data */
+	if (data_length < 0)
+	{
+		DSMCC_ERROR("Data buffer overflow");
+		return;
+	}
 
 	for (module = carousel->modules; module; module = module->next)
 	{
@@ -179,7 +183,7 @@ void dsmcc_cached_module_save_data(struct dsmcc_object_carousel *carousel, struc
 		}
 
 		/* Check that we have enough data in buffer */
-		if (length > data_length)
+		if (length > ((uint32_t) data_length))
 		{
 			DSMCC_ERROR("Data buffer overflow (need %d bytes but only got %d)", length, data_length);
 			return;

@@ -21,6 +21,7 @@ noinst_HEADERS = \
 	dsmcc-cache-file.h \
 	dsmcc-cache-module.h \
 	dsmcc-carousel.h \
+	dsmcc-config.h \
 	dsmcc-debug.h \
 	dsmcc-descriptor.h \
 	dsmcc.h \
@@ -29,6 +30,5 @@ noinst_HEADERS = \
 	dsmcc-util.h
 
 AM_CFLAGS = \
-	-Werror \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src

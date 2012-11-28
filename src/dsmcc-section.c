@@ -195,7 +195,7 @@ static int dsmcc_parse_biop_service_gateway_info(struct biop_ior *gateway_ior, u
 /*
  * ETSI TR 101 202 Table A.3
  */
-static int dsmcc_parse_section_dsi(struct dsmcc_state *state, struct dsmcc_object_carousel *carousel, uint8_t *data, int data_length)
+static int dsmcc_parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *data, int data_length)
 {
         int off = 0, ret;
 	uint16_t i, dsi_data_length;
@@ -402,7 +402,7 @@ static int dsmcc_parse_section_control(struct dsmcc_state *state, struct dsmcc_s
 			{
 				if (carousel->dsi_transaction_id != header.transaction_id)
 				{
-					ret = dsmcc_parse_section_dsi(state, carousel, data + off, data_length - off);
+					ret = dsmcc_parse_section_dsi(carousel, data + off, data_length - off);
 					if (ret < 0)
 						return -1;
 					carousel->dsi_transaction_id = header.transaction_id;
@@ -505,7 +505,7 @@ static int dsmcc_parse_data_header(struct dsmcc_data_header *header, uint8_t *da
 /*
  * ETSI TR 101 202 Table A.5
  */
-static int dsmcc_parse_section_ddb(struct dsmcc_state *state, struct dsmcc_object_carousel *carousel, struct dsmcc_data_header *header, uint8_t *data, int data_length)
+static int dsmcc_parse_section_ddb(struct dsmcc_object_carousel *carousel, struct dsmcc_data_header *header, uint8_t *data, int data_length)
 {
 	int off = 0;
 	struct dsmcc_ddb ddb;
@@ -545,7 +545,7 @@ static int dsmcc_parse_section_ddb(struct dsmcc_state *state, struct dsmcc_objec
 	return off;
 }
 
-static int dsmcc_parse_section_data(struct dsmcc_state *state, struct dsmcc_stream *stream, uint8_t *data, int data_length)
+static int dsmcc_parse_section_data(struct dsmcc_stream *stream, uint8_t *data, int data_length)
 {
 	struct dsmcc_data_header header;
 	int off = 0, ret;
@@ -561,7 +561,7 @@ static int dsmcc_parse_section_data(struct dsmcc_state *state, struct dsmcc_stre
 	carousel = dsmcc_stream_queue_find(stream, DSMCC_QUEUE_ENTRY_DDB, header.download_id);
 	if (carousel)
 	{
-		ret = dsmcc_parse_section_ddb(state, carousel, &header, data + off, data_length - off);
+		ret = dsmcc_parse_section_ddb(carousel, &header, data + off, data_length - off);
 		if (ret < 0)
 			return -1;
 	}
@@ -609,7 +609,7 @@ int dsmcc_parse_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, 
 			break;
 		case 0x3C:
 			DSMCC_DEBUG("DDB Section");
-			ret = dsmcc_parse_section_data(state, stream, data + off, header.length);
+			ret = dsmcc_parse_section_data(stream, data + off, header.length);
 			if (ret < 0)
 				return 0;
 			break;

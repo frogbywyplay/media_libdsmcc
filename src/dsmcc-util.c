@@ -129,7 +129,7 @@ bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int l
 	while (length > 0)
 	{
 		rsize = length;
-		if (rsize > sizeof data_buf)
+		if (rsize > ((int) sizeof data_buf))
 			rsize = sizeof data_buf;
 
 		rsize = read(src, data_buf, rsize);

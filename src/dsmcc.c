@@ -109,7 +109,7 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 	}
 
 	str = dsmcc_stream_find_by_pid(state, pid);
-	if (!str)
+	if (!str && create_if_missing)
 	{
 		DSMCC_DEBUG("Adding stream with pid 0x%hx", pid);
 
@@ -121,7 +121,7 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 		state->streams = str;
 	}
 
-	if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
+	if (str && stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
 		dsmcc_stream_add_assoc_tag(str, stream_selector);
 
 	return str;
