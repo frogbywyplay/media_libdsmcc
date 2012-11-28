@@ -42,7 +42,7 @@ struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callba
 	return state;
 }
 
-static struct dsmcc_stream *dsmcc_stream_find_by_pid(struct dsmcc_state *state, uint16_t pid)
+static struct dsmcc_stream *find_stream_by_pid(struct dsmcc_state *state, uint16_t pid)
 {
 	struct dsmcc_stream *str;
 
@@ -55,7 +55,7 @@ static struct dsmcc_stream *dsmcc_stream_find_by_pid(struct dsmcc_state *state, 
 	return str;
 }
 
-static struct dsmcc_stream *dsmcc_stream_find_by_assoc_tag(struct dsmcc_stream *streams, uint16_t assoc_tag)
+static struct dsmcc_stream *find_stream_by_assoc_tag(struct dsmcc_stream *streams, uint16_t assoc_tag)
 {
 	struct dsmcc_stream *str;
 	int i;
@@ -92,7 +92,7 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 
 	if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
 	{
-		str = dsmcc_stream_find_by_assoc_tag(state->streams, stream_selector);
+		str = find_stream_by_assoc_tag(state->streams, stream_selector);
 		if (str)
 			return str;
 
@@ -108,7 +108,7 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 		return NULL;
 	}
 
-	str = dsmcc_stream_find_by_pid(state, pid);
+	str = find_stream_by_pid(state, pid);
 	if (!str && create_if_missing)
 	{
 		DSMCC_DEBUG("Adding stream with pid 0x%hx", pid);
@@ -201,7 +201,7 @@ void dsmcc_stream_queue_remove(struct dsmcc_object_carousel *carousel, int type)
 	}
 }
 
-static void dsmcc_stream_queue_free_entries(struct dsmcc_queue_entry *entry)
+static void free_queue_entries(struct dsmcc_queue_entry *entry)
 {
 	while (entry)
 	{
@@ -211,14 +211,14 @@ static void dsmcc_stream_queue_free_entries(struct dsmcc_queue_entry *entry)
 	}
 }
 
-static void dsmcc_stream_free_all(struct dsmcc_stream *stream)
+static void free_all_streams(struct dsmcc_stream *stream)
 {
 	while (stream)
 	{
 		struct dsmcc_stream *next = stream->next;
 		if (stream->assoc_tags)
 			free(stream->assoc_tags);
-		dsmcc_stream_queue_free_entries(stream->queue);
+		free_queue_entries(stream->queue);
 		free(stream);
 		stream = next;
 	}
@@ -232,7 +232,7 @@ void dsmcc_close(struct dsmcc_state *state)
 	dsmcc_object_carousel_free_all(state->carousels);
 	state->carousels = NULL;
 
-	dsmcc_stream_free_all(state->streams);
+	free_all_streams(state->streams);
 	state->streams = NULL;
 
 	free(state->tmpdir);

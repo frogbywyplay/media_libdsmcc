@@ -19,7 +19,6 @@
 #include "dsmcc-cache-file.h"
 #include "dsmcc-util.h"
 #include "dsmcc-carousel.h"
-#include "dsmcc-section.h"
 
 struct dsmcc_section_header
 {
@@ -44,7 +43,7 @@ struct dsmcc_data_header
 /**
   * returns number of bytes to skip to get to next data or -1 on error
   */
-static int dsmcc_parse_section_header(struct dsmcc_section_header *header, uint8_t *data, int data_length)
+static int parse_section_header(struct dsmcc_section_header *header, uint8_t *data, int data_length)
 {
 	int off = 0;
 	int section_syntax_indicator;
@@ -91,7 +90,7 @@ static int dsmcc_parse_section_header(struct dsmcc_section_header *header, uint8
  * returns number of bytes to skip to get to next data or -1 on error
  * ETSI TR 101 202 Table A.1
  */
-static int dsmcc_parse_message_header(struct dsmcc_message_header *header, uint8_t *data, int data_length)
+static int parse_message_header(struct dsmcc_message_header *header, uint8_t *data, int data_length)
 {
 	int off = 0;
 	uint8_t protocol, type, adaptation_length;
@@ -147,7 +146,7 @@ static int dsmcc_parse_message_header(struct dsmcc_message_header *header, uint8
 /*
  * ETSI TR 101 202 Table 4.15
  */
-static int dsmcc_parse_biop_service_gateway_info(struct biop_ior *gateway_ior, uint8_t *data, int data_length)
+static int parse_service_gateway_info(struct biop_ior *gateway_ior, uint8_t *data, int data_length)
 {
 	int off = 0, ret;
 	uint8_t tmp;
@@ -195,7 +194,7 @@ static int dsmcc_parse_biop_service_gateway_info(struct biop_ior *gateway_ior, u
 /*
  * ETSI TR 101 202 Table A.3
  */
-static int dsmcc_parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *data, int data_length)
+static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *data, int data_length)
 {
         int off = 0, ret;
 	uint16_t i, dsi_data_length;
@@ -219,15 +218,10 @@ static int dsmcc_parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8
 		return -1;
 	off += 2;
 	DSMCC_DEBUG("DSI: Data Length %hu", dsi_data_length);
-	if (dsi_data_length > data_length - off)
-	{
-		DSMCC_ERROR("DSI: Data buffer overflow (need %hu bytes but only got %d)", dsi_data_length, data_length - off);
-		return -1;
-	}
 
 	DSMCC_DEBUG("DSI: Processing BIOP::ServiceGatewayInfo...");
 	memset(&gateway_ior, 0, sizeof(struct biop_ior));
-	ret = dsmcc_parse_biop_service_gateway_info(&gateway_ior, data + off, dsi_data_length);
+	ret = parse_service_gateway_info(&gateway_ior, data + off, dsmcc_min(data_length - off, dsi_data_length));
 	if (ret < 0)
 		return -1;
 	off += dsi_data_length;
@@ -260,13 +254,14 @@ static int dsmcc_parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8
 /*
  * ETSI TR 101 202 Table A.4
  */
-static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_object_carousel *carousel, uint8_t *data, int data_length)
+static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *data, int data_length)
 {
 	int off = 0, ret;
 	uint16_t i, number_modules;
 	uint32_t download_id;
 	uint16_t block_size;
-	struct dsmcc_cached_module_info *modules;
+	struct dsmcc_module_id *modules_id;
+	struct dsmcc_module_info *modules_info;
 	uint16_t *assoc_tags;
 
 	if (!dsmcc_getlong(&download_id, data, off, data_length))
@@ -297,7 +292,8 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 	off += 2;
 	DSMCC_DEBUG("DII: Number of modules %hu", number_modules);
 
-	modules = calloc(number_modules, sizeof(struct dsmcc_cached_module_info));
+	modules_id = calloc(number_modules, sizeof(struct dsmcc_module_id));
+	modules_info = calloc(number_modules, sizeof(struct dsmcc_module_info));
 	assoc_tags = calloc(number_modules, sizeof(uint16_t));
 	for (i = 0; i < number_modules; i++)
 	{
@@ -305,26 +301,26 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 		struct dsmcc_descriptor *desc;
 		uint8_t module_info_length;
 
-		modules[i].download_id = download_id;
-		modules[i].block_size = block_size;
+		modules_id[i].download_id = download_id;
+		modules_info[i].block_size = block_size;
 
-		if (!dsmcc_getshort(&modules[i].module_id, data, off, data_length))
+		if (!dsmcc_getshort(&modules_id[i].module_id, data, off, data_length))
 			goto error;
 		off += 2;
-		if (!dsmcc_getlong(&modules[i].module_size, data, off, data_length))
+		if (!dsmcc_getlong(&modules_info[i].module_size, data, off, data_length))
 			goto error;
 		off += 4;
-		if (!dsmcc_getbyte(&modules[i].module_version, data, off, data_length))
+		if (!dsmcc_getbyte(&modules_id[i].module_version, data, off, data_length))
 			goto error;
 		off++;
 		if (!dsmcc_getbyte(&module_info_length, data, off, data_length))
 			goto error;
 		off++;
 
-		DSMCC_DEBUG("DII: Module ID 0x%04hx Size %u Version 0x%02hhx", modules[i].module_id, modules[i].module_size, modules[i].module_version);
+		DSMCC_DEBUG("DII: Module ID 0x%04hx Size %u Version 0x%02hhx", modules_id[i].module_id, modules_info[i].module_size, modules_id[i].module_version);
 
 		bmi = malloc(sizeof(struct biop_module_info));
-		ret = dsmcc_biop_parse_module_info(bmi, data + off, data_length - off);
+		ret = dsmcc_biop_parse_module_info(bmi, data + off, dsmcc_min(data_length - off, module_info_length));
 		if (ret < 0)
 		{
 			dsmcc_biop_free_module_info(bmi);
@@ -336,9 +332,9 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 		desc = dsmcc_find_descriptor_by_type(bmi->descriptors, DSMCC_DESCRIPTOR_COMPRESSED);
 		if (desc)
 		{
-			modules[i].compressed = 1;
-			modules[i].compress_method = desc->data.compressed.method;
-			modules[i].uncompressed_size = desc->data.compressed.original_size;
+			modules_info[i].compressed = 1;
+			modules_info[i].compress_method = desc->data.compressed.method;
+			modules_info[i].uncompressed_size = desc->data.compressed.original_size;
 		}
 		dsmcc_biop_free_module_info(bmi);
 
@@ -355,21 +351,22 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 	if (carousel->download_id != download_id)
 	{
 		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
-		dsmcc_cached_module_free_all(carousel);
+		dsmcc_cache_free_all_modules(carousel);
 		dsmcc_filecache_reset(carousel);
 	}
 
 	/* add modules info to module cache */
 	for (i = 0; i < number_modules; i++)
 	{
-		dsmcc_cached_module_add_info(state, carousel, &modules[i]);
+		dsmcc_cache_add_module_info(carousel, &modules_id[i], &modules_info[i]);
 
 		/* Queue entry for DDBs */
 		dsmcc_stream_queue_add(carousel,
 				DSMCC_STREAM_SELECTOR_ASSOC_TAG, assoc_tags[i],
 				DSMCC_QUEUE_ENTRY_DDB, download_id);
 	}
-	free(modules);
+	free(modules_id);
+	free(modules_info);
 	free(assoc_tags);
 
 	carousel->download_id = download_id;
@@ -377,18 +374,19 @@ static int dsmcc_parse_section_dii(struct dsmcc_state *state, struct dsmcc_objec
 	return off;
 
 error:
-	free(modules);
+	free(modules_id);
+	free(modules_info);
 	free(assoc_tags);
 	return -1;
 }
 
-static int dsmcc_parse_section_control(struct dsmcc_state *state, struct dsmcc_stream *stream, uint8_t *data, int data_length)
+static int parse_section_control(struct dsmcc_stream *stream, uint8_t *data, int data_length)
 {
 	struct dsmcc_message_header header;
 	int off = 0, ret;
 	struct dsmcc_object_carousel *carousel;
 
-	ret = dsmcc_parse_message_header(&header, data, data_length);
+	ret = parse_message_header(&header, data, data_length);
 	if (ret < 0)
 		return -1;
 	off += ret;
@@ -402,7 +400,7 @@ static int dsmcc_parse_section_control(struct dsmcc_state *state, struct dsmcc_s
 			{
 				if (carousel->dsi_transaction_id != header.transaction_id)
 				{
-					ret = dsmcc_parse_section_dsi(carousel, data + off, data_length - off);
+					ret = parse_section_dsi(carousel, data + off, data_length - off);
 					if (ret < 0)
 						return -1;
 					carousel->dsi_transaction_id = header.transaction_id;
@@ -420,7 +418,7 @@ static int dsmcc_parse_section_control(struct dsmcc_state *state, struct dsmcc_s
 			{
 				if (carousel->dii_transaction_id != header.transaction_id)
 				{
-					ret = dsmcc_parse_section_dii(state, carousel, data + off, data_length - off);
+					ret = parse_section_dii(carousel, data + off, data_length - off);
 					if (ret < 0)
 						return -1;
 					carousel->dii_transaction_id = header.transaction_id;
@@ -444,7 +442,7 @@ static int dsmcc_parse_section_control(struct dsmcc_state *state, struct dsmcc_s
 /*
  * ETSI TR 101 202 Table A.2
  */
-static int dsmcc_parse_data_header(struct dsmcc_data_header *header, uint8_t *data, int data_length)
+static int parse_data_header(struct dsmcc_data_header *header, uint8_t *data, int data_length)
 {
 	int off = 0;
 	uint8_t protocol, type, adaptation_length;
@@ -505,38 +503,47 @@ static int dsmcc_parse_data_header(struct dsmcc_data_header *header, uint8_t *da
 /*
  * ETSI TR 101 202 Table A.5
  */
-static int dsmcc_parse_section_ddb(struct dsmcc_object_carousel *carousel, struct dsmcc_data_header *header, uint8_t *data, int data_length)
+static int parse_section_ddb(struct dsmcc_object_carousel *carousel, struct dsmcc_data_header *header, uint8_t *data, int data_length)
 {
 	int off = 0;
-	struct dsmcc_ddb ddb;
+	struct dsmcc_module_id module_id;
+	uint16_t block_number;
+	int length;
 
-	ddb.download_id = header->download_id;
+	module_id.download_id = header->download_id;
 
-	if (!dsmcc_getshort(&ddb.module_id, data, off, data_length))
+	if (!dsmcc_getshort(&module_id.module_id, data, off, data_length))
 		return -1;
 	off += 2;
-	DSMCC_DEBUG("DDB: Module ID 0x%04hx", ddb.module_id);
+	DSMCC_DEBUG("DDB: Module ID 0x%04hx", module_id.module_id);
 
-	if (!dsmcc_getbyte(&ddb.module_version, data, off, data_length))
+	if (!dsmcc_getbyte(&module_id.module_version, data, off, data_length))
 		return -1;
 	off++;
-	DSMCC_DEBUG("DDB: Module Version %u", ddb.module_version);
+	DSMCC_DEBUG("DDB: Module Version %u", module_id.module_version);
 
 	/* skip reserved byte */
 	off++;
 
-	if (!dsmcc_getshort(&ddb.number, data, off, data_length))
+	if (!dsmcc_getshort(&block_number, data, off, data_length))
 		return -1;
 	off += 2;
-	DSMCC_DEBUG("DDB: Block Number %u", ddb.number);
+	DSMCC_DEBUG("DDB: Block Number %u", block_number);
 
-	ddb.length = header->message_length - off;
-	DSMCC_DEBUG("DDB: Block Length %hu", ddb.length);
+	length = header->message_length - off;
+	DSMCC_DEBUG("DDB: Block Length %d", length);
 
-	dsmcc_cached_module_save_data(carousel, &ddb, data + off, data_length - off);
-	off += ddb.length;
+	/* Check that we have enough data in buffer */
+	if (length > data_length - off)
+	{
+		DSMCC_ERROR("DDB: Data buffer overflow (need %d bytes but only got %d)", length, data_length - off);
+		return -1;
+	}
 
-	if (dsmcc_cached_modules_are_complete(carousel))
+	dsmcc_cache_save_module_data(carousel, &module_id, block_number, data + off, length);
+	off += length;
+
+	if (carousel->complete)
 	{
 		DSMCC_DEBUG("Carousel 0x%08x is complete!", carousel->cid);
 		dsmcc_filecache_clean(carousel);
@@ -545,7 +552,7 @@ static int dsmcc_parse_section_ddb(struct dsmcc_object_carousel *carousel, struc
 	return off;
 }
 
-static int dsmcc_parse_section_data(struct dsmcc_stream *stream, uint8_t *data, int data_length)
+static int parse_section_data(struct dsmcc_stream *stream, uint8_t *data, int data_length)
 {
 	struct dsmcc_data_header header;
 	int off = 0, ret;
@@ -553,7 +560,7 @@ static int dsmcc_parse_section_data(struct dsmcc_stream *stream, uint8_t *data, 
 
 	DSMCC_DEBUG("Parsing DDB section for stream with PID 0x%hx", stream->pid);
 
-	ret = dsmcc_parse_data_header(&header, data, data_length);
+	ret = parse_data_header(&header, data, data_length);
 	if (ret < 0)
 		return -1;
 	off += ret;
@@ -561,7 +568,7 @@ static int dsmcc_parse_section_data(struct dsmcc_stream *stream, uint8_t *data, 
 	carousel = dsmcc_stream_queue_find(stream, DSMCC_QUEUE_ENTRY_DDB, header.download_id);
 	if (carousel)
 	{
-		ret = dsmcc_parse_section_ddb(carousel, &header, data + off, data_length - off);
+		ret = parse_section_ddb(carousel, &header, data + off, data_length - off);
 		if (ret < 0)
 			return -1;
 	}
@@ -586,7 +593,7 @@ int dsmcc_parse_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, 
 		return 0;
 	}
 
-	ret = dsmcc_parse_section_header(&header, data, data_length);
+	ret = parse_section_header(&header, data, data_length);
 	if (ret < 0)
 		return 0;
 	off += ret;
@@ -603,13 +610,13 @@ int dsmcc_parse_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, 
 	{
 		case 0x3B:
 			DSMCC_DEBUG("DSI/DII Section");
-			ret = dsmcc_parse_section_control(state, stream, data + off, header.length);
+			ret = parse_section_control(stream, data + off, header.length);
 			if (ret < 0)
 				return 0;
 			break;
 		case 0x3C:
 			DSMCC_DEBUG("DDB Section");
-			ret = dsmcc_parse_section_data(stream, data + off, header.length);
+			ret = parse_section_data(stream, data + off, header.length);
 			if (ret < 0)
 				return 0;
 			break;

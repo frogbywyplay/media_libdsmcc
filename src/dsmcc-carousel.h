@@ -7,14 +7,14 @@ struct dsmcc_object_carousel
 {
 	struct dsmcc_state *state;
 	uint32_t            cid;
+	bool                complete;
 
 	uint32_t dsi_transaction_id;
 	uint32_t dii_transaction_id;
 	uint32_t download_id;
 
-	struct dsmcc_cached_module *modules;
-
-	struct dsmcc_file_cache    *filecache;
+	struct dsmcc_module     *modules;
+	struct dsmcc_file_cache *filecache;
 
 	struct dsmcc_object_carousel *next;
 };

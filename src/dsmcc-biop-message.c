@@ -10,6 +10,7 @@
 #include "dsmcc-biop-message.h"
 #include "dsmcc-biop-ior.h"
 #include "dsmcc-cache-file.h"
+#include "dsmcc-cache-module.h"
 
 #define BIOP_MAGIC 0x42494f50
 
@@ -24,7 +25,20 @@ struct biop_msg_header
 	uint32_t kind;
 };
 
-static int dsmcc_biop_parse_msg_header(struct biop_msg_header *header, uint8_t *data, int data_length)
+struct biop_name
+{
+	char *id;
+	char *kind;
+};
+
+struct biop_binding
+{
+	uint8_t          binding_type;
+	struct biop_name name;
+	struct biop_ior  ior;
+};
+
+static int parse_msg_header(struct biop_msg_header *header, uint8_t *data, int data_length)
 {
 	int off = 0;
 	uint32_t magic, kind_len;
@@ -125,7 +139,7 @@ static int dsmcc_biop_parse_msg_header(struct biop_msg_header *header, uint8_t *
 	return off;
 }
 
-static int dsmcc_biop_parse_name(struct biop_name *name, uint8_t *data, int data_length)
+static int parse_name(struct biop_name *name, uint8_t *data, int data_length)
 {
 	int off = 0;
 	uint8_t comp_count, len;
@@ -162,7 +176,7 @@ static int dsmcc_biop_parse_name(struct biop_name *name, uint8_t *data, int data
 	return off;
 }
 
-static void dsmcc_biop_free_binding(struct biop_binding *binding)
+static void free_binding(struct biop_binding *binding)
 {
 	if (binding->name.id != NULL)
 		free(binding->name.id);
@@ -171,13 +185,13 @@ static void dsmcc_biop_free_binding(struct biop_binding *binding)
 	free(binding);
 }
 
-static int dsmcc_biop_parse_binding(struct biop_binding *bind, uint8_t *data, int data_length)
+static int parse_binding(struct biop_binding *bind, uint8_t *data, int data_length)
 {
 	int off = 0, ret;
 	uint16_t objinfo_len;
 
 	memset(&bind->name, 0, sizeof(struct biop_name));
-	ret = dsmcc_biop_parse_name(&bind->name, data, data_length);
+	ret = parse_name(&bind->name, data, data_length);
 	if (ret < 0)
 		return -1;
 	off += ret;
@@ -203,7 +217,7 @@ static int dsmcc_biop_parse_binding(struct biop_binding *bind, uint8_t *data, in
 	return off;
 }
 
-static int dsmcc_biop_skip_service_context_list(uint8_t *data, int data_length)
+static int skip_service_context_list(uint8_t *data, int data_length)
 {
 	int off = 0, i;
 	uint8_t serviceContextList_count;
@@ -234,7 +248,7 @@ static int dsmcc_biop_skip_service_context_list(uint8_t *data, int data_length)
 	return off;
 }
 
-static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, uint16_t module_id, uint32_t key, uint32_t key_mask, uint8_t *data, int data_length)
+static int parse_dir(struct dsmcc_file_cache *filecache, struct dsmcc_file_id *id, uint8_t *data, int data_length)
 {
 	int i;
 	int off = 0, ret;
@@ -242,7 +256,7 @@ static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, uint16_t mod
 	uint16_t bindings_count;
 
 	/* skip service context list */
-	ret = dsmcc_biop_skip_service_context_list(data, data_length);
+	ret = skip_service_context_list(data, data_length);
 	if (ret < 0)
 		return -1;
 	off += ret;
@@ -259,54 +273,61 @@ static int dsmcc_biop_parse_dir(struct dsmcc_file_cache *filecache, uint16_t mod
 
 	for (i = 0; i < bindings_count; i++)
 	{
-		struct biop_binding *binding = malloc(sizeof(struct biop_binding));
-		ret = dsmcc_biop_parse_binding(binding, data + off, data_length - off);
+		struct dsmcc_file_id entry_id;
+		struct biop_binding *binding;
+	       
+		binding = malloc(sizeof(struct biop_binding));
+		ret = parse_binding(binding, data + off, data_length - off);
 		if (ret < 0)
 		{
-			dsmcc_biop_free_binding(binding);
+			free_binding(binding);
 			return -1;
 		}
 		off += ret;
+
+		entry_id.module_id = binding->ior.profile_body.obj_loc.module_id;
+		entry_id.key = binding->ior.profile_body.obj_loc.key;
+		entry_id.key_mask = binding->ior.profile_body.obj_loc.key_mask;
 
 		if (!strcmp("dir", binding->name.kind))
 		{
 			if (binding->binding_type != BINDING_TYPE_NCONTEXT)
 			{
 				DSMCC_ERROR("Invalid binding type for Directory (got %hhu but expected %hhu)", binding->binding_type, BINDING_TYPE_NCONTEXT);
-				dsmcc_biop_free_binding(binding);
+				free_binding(binding);
 				return -1;
 			}
 			DSMCC_DEBUG("Caching info for directory '%s'", binding->name.id);
-			dsmcc_filecache_cache_dir_info(filecache, module_id, key, key_mask, binding);
+			dsmcc_filecache_cache_dir_info(filecache, id, &entry_id, binding->name.id);
 		}
 		else if (!strcmp("fil", binding->name.kind))
 		{
 			if (binding->binding_type != BINDING_TYPE_NOBJECT)
 			{
 				DSMCC_ERROR("Invalid binding type for File (got %hhu but expected %hhu)", binding->binding_type, BINDING_TYPE_NOBJECT);
-				dsmcc_biop_free_binding(binding);
+				free_binding(binding);
 				return -1;
 			}
 			DSMCC_DEBUG("Caching info for file '%s'", binding->name.id);
-			dsmcc_filecache_cache_file_info(filecache, module_id, key, key_mask, binding);
+			dsmcc_filecache_cache_file_info(filecache, id, &entry_id, binding->name.id);
 		}
 		else
 			DSMCC_WARN("Skipping unknown object id '%s' kind '%s'", binding->name.id, binding->name.kind);
 
-		dsmcc_biop_free_binding(binding);
+		free_binding(binding);
 	}
 
 	return off;
 }
 
-static int dsmcc_biop_parse_file(struct dsmcc_file_cache *filecache, uint16_t module_id, uint32_t key, uint32_t key_mask, const char *module_file, int module_offset, uint8_t *data, int data_length)
+static int parse_file(struct dsmcc_file_cache *filecache, struct dsmcc_file_id *id, const char *module_file, int module_offset, uint8_t *data, int data_length)
 {
 	int off = 0, ret;
 	uint32_t msgbody_len;
 	uint32_t content_len;
 
 	/* skip service context list */
-	ret = dsmcc_biop_skip_service_context_list(data, data_length);
+	ret = skip_service_context_list(data, data_length);
 	if (ret < 0)
 		return -1;
 	off += ret;
@@ -321,13 +342,13 @@ static int dsmcc_biop_parse_file(struct dsmcc_file_cache *filecache, uint16_t mo
 	off += 4;
 	DSMCC_DEBUG("Content Len = %u", content_len);
 
-	dsmcc_filecache_cache_file(filecache, module_id, key, key_mask, module_file, module_offset + off, content_len);
+	dsmcc_filecache_cache_file(filecache, id, module_file, module_offset + off, content_len);
 	off += content_len;
 
 	return off;
 }
 
-static uint8_t *dsmcc_biop_mmap_data(const char *filename, int size)
+static uint8_t *mmap_data(const char *filename, int size)
 {
 	int fd;
 	uint8_t *data;
@@ -351,14 +372,14 @@ static uint8_t *dsmcc_biop_mmap_data(const char *filename, int size)
 	return data;
 }
 
-int dsmcc_biop_parse_data(struct dsmcc_file_cache *filecache, uint16_t module_id, const char *module_file, int length)
+int dsmcc_biop_parse_data(struct dsmcc_file_cache *filecache, struct dsmcc_module_id *module_id, const char *module_file, int length)
 {
 	int ret, off;
 	uint8_t *data;
 
 	DSMCC_DEBUG("Data size = %d", length);
 
-	data = dsmcc_biop_mmap_data(module_file, length);
+	data = mmap_data(module_file, length);
 	if (!data)
 		return -1;
 
@@ -366,13 +387,14 @@ int dsmcc_biop_parse_data(struct dsmcc_file_cache *filecache, uint16_t module_id
 	while (off < length)
 	{
 		struct biop_msg_header header;
+		struct dsmcc_file_id id;
 
 		DSMCC_DEBUG("Current %d / %d", off, length);
 
 		/* Parse header */
 		DSMCC_DEBUG("Parsing message header");
 		memset(&header, 0, sizeof(struct biop_msg_header));
-		ret = dsmcc_biop_parse_msg_header(&header, data + off, length - off);
+		ret = parse_msg_header(&header, data + off, length - off);
 		if (ret < 0)
 		{
 			off = -1;
@@ -380,20 +402,25 @@ int dsmcc_biop_parse_data(struct dsmcc_file_cache *filecache, uint16_t module_id
 		}
 		off += ret;
 
+		id.module_id = module_id->module_id;
+		id.key = header.key;
+		id.key_mask = header.key_mask;
+
 		/* Handle each message type */
 		switch (header.kind)
 		{
 			case 0x66696c00: /* "fil" */
 				DSMCC_DEBUG("Parsing file message");
-				ret = dsmcc_biop_parse_file(filecache, module_id, header.key, header.key_mask, module_file, off, data + off, length - off);
+				ret = parse_file(filecache, &id, module_file, off, data + off, length - off);
 				break;
 			case 0x64697200: /* "dir" */
 				DSMCC_DEBUG("Parsing directory message");
-				ret = dsmcc_biop_parse_dir(filecache, module_id, header.key, header.key_mask, data + off, length - off);
+				ret = parse_dir(filecache, &id, data + off, length - off);
 				break;
 			case 0x73726700: /* "srg" */
 				DSMCC_DEBUG("Parsing gateway message");
-				ret = dsmcc_biop_parse_dir(filecache, module_id, 0, 0, data + off, length - off);
+				dsmcc_filecache_cache_dir_info(filecache, NULL, &id, "");
+				ret = parse_dir(filecache, &id, data + off, length - off);
 				break;
 			default:
 				DSMCC_WARN("Don't known of to handle unknown object (kind 0x%08x)", header.kind);

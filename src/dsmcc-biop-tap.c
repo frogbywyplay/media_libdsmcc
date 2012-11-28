@@ -8,7 +8,7 @@
 #include "dsmcc-debug.h"
 #include "dsmcc-util.h"
 
-static int dsmcc_biop_parse_tap(struct biop_tap *tap, uint8_t *data, int data_length)
+static int parse_tap(struct biop_tap *tap, uint8_t *data, int data_length)
 {
 	int off = 0;
 	uint16_t id;
@@ -58,7 +58,7 @@ int dsmcc_biop_parse_taps_keep_only_first(struct biop_tap **tap0, uint16_t tap0_
 	{
 		struct biop_tap *tap = calloc(1, sizeof(struct biop_tap));
 
-		ret = dsmcc_biop_parse_tap(tap, data + off, data_length - off);
+		ret = parse_tap(tap, data + off, data_length - off);
 		if (ret < 0)
 		{
 			dsmcc_biop_free_tap(tap);

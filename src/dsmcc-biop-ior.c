@@ -13,7 +13,7 @@
 #define TAG_ObjectLocation 0x49534F50
 #define TAG_ConnBinder     0x49534F40
 
-static int dsmcc_biop_parse_dsm_conn_binder(struct biop_dsm_conn_binder *binder, uint8_t *data, int data_length)
+static int parse_dsm_conn_binder(struct biop_dsm_conn_binder *binder, uint8_t *data, int data_length)
 {
 	int off = 0, ret;
 	struct biop_tap *tap = NULL;
@@ -52,7 +52,7 @@ error:
 	return -1;
 }
 
-static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, uint8_t *data, int data_length)
+static int parse_obj_location(struct biop_obj_location *loc, uint8_t *data, int data_length)
 {
 	int off = 0;
 	uint16_t version;
@@ -94,7 +94,7 @@ static int dsmcc_biop_parse_obj_location(struct biop_obj_location *loc, uint8_t 
 	return off;
 }
 
-static int dsmcc_biop_parse_body(struct biop_profile_body *body, uint8_t *data, int data_length)
+static int parse_profile_body(struct biop_profile_body *body, uint8_t *data, int data_length)
 {
 	int off = 0, ret, i;
 	uint8_t byte_order, lite_components_count;
@@ -140,7 +140,7 @@ static int dsmcc_biop_parse_body(struct biop_profile_body *body, uint8_t *data, 
 				goto error;
 			}
 
-			ret = dsmcc_biop_parse_obj_location(&body->obj_loc, data + off, data_length - off);
+			ret = parse_obj_location(&body->obj_loc, data + off, data_length - off);
 			if (ret < 0)
 				goto error;
 		}
@@ -153,7 +153,7 @@ static int dsmcc_biop_parse_body(struct biop_profile_body *body, uint8_t *data, 
 				goto error;
 			}
 
-			ret = dsmcc_biop_parse_dsm_conn_binder(&body->conn_binder, data + off, data_length - off);
+			ret = parse_dsm_conn_binder(&body->conn_binder, data + off, data_length - off);
 			if (ret < 0)
 				goto error;
 		}
@@ -256,7 +256,7 @@ int dsmcc_biop_parse_ior(struct biop_ior *ior, uint8_t *data, int data_length)
 		{
 			if (!found)
 			{
-				ret = dsmcc_biop_parse_body(&ior->profile_body, data + off, data_length - off);
+				ret = parse_profile_body(&ior->profile_body, data + off, data_length - off);
 				if (ret < 0)
 					return -1;
 				found = 1;

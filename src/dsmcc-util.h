@@ -11,6 +11,14 @@ void dsmcc_mkdir(const char *name, mode_t mode);
 bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int length);
 bool dsmcc_file_write_block(const char *dstfile, int offset, uint8_t *data, int length);
 
+static inline int dsmcc_min(int a, int b)
+{
+	if (a < b)
+		return a;
+	else
+		return b;
+}
+
 static inline bool dsmcc_getlong(uint32_t *dst, const uint8_t *data, int offset, int length)
 {
 	data += offset;

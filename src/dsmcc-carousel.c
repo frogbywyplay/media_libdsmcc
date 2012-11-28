@@ -44,10 +44,10 @@ struct dsmcc_object_carousel *dsmcc_find_carousel_by_id(struct dsmcc_object_caro
 	return carousels;
 }
 
-static void dsmcc_object_carousel_free(struct dsmcc_object_carousel *car)
+static void free_carousel(struct dsmcc_object_carousel *car)
 {
-	/* Free cached modules */
-	dsmcc_cached_module_free_all(car);
+	/* Free modules */
+	dsmcc_cache_free_all_modules(car);
 	car->modules = NULL;
 
 	/* Free filecache */
@@ -64,7 +64,7 @@ void dsmcc_object_carousel_free_all(struct dsmcc_object_carousel *car)
 	while (car)
 	{
 		nextcar = car->next;
-		dsmcc_object_carousel_free(car);
+		free_carousel(car);
 		car = nextcar;
 	}
 }

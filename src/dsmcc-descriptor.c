@@ -45,7 +45,7 @@ void dsmcc_descriptors_free_all(struct dsmcc_descriptor *descriptors)
 	}
 }
 
-static int dsmcc_parse_type_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_type_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_type *type = &desc->data.type;
 
@@ -57,7 +57,7 @@ static int dsmcc_parse_type_descriptor(struct dsmcc_descriptor *desc, uint8_t *d
 	return length;
 }
 
-static int dsmcc_parse_name_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_name_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_name *name = &desc->data.name;
 
@@ -69,7 +69,7 @@ static int dsmcc_parse_name_descriptor(struct dsmcc_descriptor *desc, uint8_t *d
 	return length;
 }
 
-static int dsmcc_parse_info_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_info_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_info *info = &desc->data.info;
 
@@ -86,7 +86,7 @@ static int dsmcc_parse_info_descriptor(struct dsmcc_descriptor *desc, uint8_t *d
 	return length;
 }
 
-static int dsmcc_parse_modlink_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_modlink_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_modlink *modlink = &desc->data.modlink;
 
@@ -100,7 +100,7 @@ static int dsmcc_parse_modlink_descriptor(struct dsmcc_descriptor *desc, uint8_t
 	return 3;
 }
 
-static int dsmcc_parse_crc32_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_crc32_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_crc32 *crc32 = &desc->data.crc32;
 
@@ -112,7 +112,7 @@ static int dsmcc_parse_crc32_descriptor(struct dsmcc_descriptor *desc, uint8_t *
 	return 4;
 }
 
-static int dsmcc_parse_location_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_location_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_location *location = &desc->data.location;
 
@@ -124,7 +124,7 @@ static int dsmcc_parse_location_descriptor(struct dsmcc_descriptor *desc, uint8_
 	return 1;
 }
 
-static int dsmcc_parse_dltime_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_dltime_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_dltime *dltime = &desc->data.dltime;
 
@@ -136,7 +136,7 @@ static int dsmcc_parse_dltime_descriptor(struct dsmcc_descriptor *desc, uint8_t 
 	return 4;
 }
 
-static int dsmcc_parse_grouplink_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_grouplink_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_grouplink *grouplink = &desc->data.grouplink;
 
@@ -150,7 +150,7 @@ static int dsmcc_parse_grouplink_descriptor(struct dsmcc_descriptor *desc, uint8
 	return 5;
 }
 
-static int dsmcc_parse_compressed_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_compressed_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_compressed *compressed = &desc->data.compressed;
 
@@ -164,7 +164,7 @@ static int dsmcc_parse_compressed_descriptor(struct dsmcc_descriptor *desc, uint
 	return 5;
 }
 
-static int dsmcc_parse_label_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_label_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_label *label = &desc->data.label;
 
@@ -176,7 +176,7 @@ static int dsmcc_parse_label_descriptor(struct dsmcc_descriptor *desc, uint8_t *
 	return length;
 }
 
-static int dsmcc_parse_caching_priority_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_caching_priority_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_caching_priority *caching_priority = &desc->data.caching_priority;
 
@@ -190,7 +190,7 @@ static int dsmcc_parse_caching_priority_descriptor(struct dsmcc_descriptor *desc
 	return 2;
 }
 
-static int dsmcc_parse_content_type_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
+static int parse_content_type_descriptor(struct dsmcc_descriptor *desc, uint8_t *data, int length)
 {
 	struct dsmcc_descriptor_content_type *content_type = &desc->data.content_type;
 
@@ -202,7 +202,7 @@ static int dsmcc_parse_content_type_descriptor(struct dsmcc_descriptor *desc, ui
 	return length;
 }
 
-static int dsmcc_parse_one_descriptor(struct dsmcc_descriptor **descriptor, uint8_t *data, int data_length)
+static int parse_descriptor(struct dsmcc_descriptor **descriptor, uint8_t *data, int data_length)
 {
 	int off = 0, ret;
 	struct dsmcc_descriptor *desc;
@@ -224,40 +224,40 @@ static int dsmcc_parse_one_descriptor(struct dsmcc_descriptor **descriptor, uint
 
 	switch(tag) {
 		case 0x01:
-			ret = dsmcc_parse_type_descriptor(desc, data + off, length);
+			ret = parse_type_descriptor(desc, data + off, length);
 			break;
 		case 0x02:
-			ret = dsmcc_parse_name_descriptor(desc, data + off, length);
+			ret = parse_name_descriptor(desc, data + off, length);
 			break;
 		case 0x03:
-			ret = dsmcc_parse_info_descriptor(desc, data + off, length);
+			ret = parse_info_descriptor(desc, data + off, length);
 			break;
 		case 0x04:
-			ret = dsmcc_parse_modlink_descriptor(desc, data + off, length);
+			ret = parse_modlink_descriptor(desc, data + off, length);
 			break;
 		case 0x05:
-			ret = dsmcc_parse_crc32_descriptor(desc, data + off, length);
+			ret = parse_crc32_descriptor(desc, data + off, length);
 			break;
 		case 0x06:
-			ret = dsmcc_parse_location_descriptor(desc, data + off, length);
+			ret = parse_location_descriptor(desc, data + off, length);
 			break;
 		case 0x07:
-			ret = dsmcc_parse_dltime_descriptor(desc, data + off, length);
+			ret = parse_dltime_descriptor(desc, data + off, length);
 			break;
 		case 0x08:
-			ret = dsmcc_parse_grouplink_descriptor(desc, data + off, length);
+			ret = parse_grouplink_descriptor(desc, data + off, length);
 			break;
 		case 0x09:
-			ret = dsmcc_parse_compressed_descriptor(desc, data + off, length);
+			ret = parse_compressed_descriptor(desc, data + off, length);
 			break;
 		case 0x70:
-			ret = dsmcc_parse_label_descriptor(desc, data + off, length);
+			ret = parse_label_descriptor(desc, data + off, length);
 			break;
 		case 0x71:
-			ret = dsmcc_parse_caching_priority_descriptor(desc, data + off, length);
+			ret = parse_caching_priority_descriptor(desc, data + off, length);
 			break;
 		case 0x72:
-			ret = dsmcc_parse_content_type_descriptor(desc, data + off, length);
+			ret = parse_content_type_descriptor(desc, data + off, length);
 			break;
 		default:
 			DSMCC_WARN("Unknown/Unhandled descriptor, Tag 0x%02x Length %d", tag, length);
@@ -291,7 +291,7 @@ int dsmcc_parse_descriptors(struct dsmcc_descriptor **descriptors, uint8_t *data
 	while (off < data_length)
 	{
 		struct dsmcc_descriptor *desc = NULL;
-		ret = dsmcc_parse_one_descriptor(&desc, data + off, data_length - off);
+		ret = parse_descriptor(&desc, data + off, data_length - off);
 		if (ret < 0)
 		{
 			dsmcc_descriptors_free_all(list_head);
