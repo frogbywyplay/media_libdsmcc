@@ -61,7 +61,8 @@ static int inf(FILE *source, FILE *dest)
 			switch (ret)
 			{
 				case Z_NEED_DICT:
-					ret = Z_DATA_ERROR;     /* and fall through */
+					ret = Z_DATA_ERROR;
+					/* no break */
 				case Z_DATA_ERROR:
 				case Z_MEM_ERROR:
 					(void)inflateEnd(&strm);
@@ -108,6 +109,7 @@ static void log_zerr(int ret, FILE *input, FILE *output)
 			break;
 		default:
 			DSMCC_ERROR("Unexpected zlib error %d", ret);
+			break;
 	}
 }
 

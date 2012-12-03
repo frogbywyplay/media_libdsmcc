@@ -34,6 +34,7 @@ static void logger(int severity, const char *message)
 			break;
 		default:
 			sev = "";
+			break;
 	}
 	fprintf(stderr, "[dsmcc]%s %s\n", sev, message);
 }
@@ -69,6 +70,7 @@ static int cache_callback(void *arg, uint32_t cid, int type, int reason, const c
 			break;
 		default:
 			t = "?";
+			break;
 	}
 
 	switch (reason)
@@ -81,6 +83,7 @@ static int cache_callback(void *arg, uint32_t cid, int type, int reason, const c
 			break;
 		default:
 			r = "?";
+			break;
 	}
 
 	fprintf(stderr, "[main] Cache callback for %d:%s (%s %s)\n", cid, path, t, r);

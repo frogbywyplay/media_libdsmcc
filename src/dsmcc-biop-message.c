@@ -488,6 +488,7 @@ int dsmcc_biop_msg_parse_data(struct biop_msg **messages, struct dsmcc_module_id
 			default:
 				DSMCC_WARN("Don't known of to handle unknown object (kind 0x%08x)", header.kind);
 				ret = 1;
+				break;
 		}
 		if (ret < 0)
 		{

@@ -264,6 +264,7 @@ static int parse_descriptor(struct dsmcc_descriptor **descriptor, uint8_t *data,
 			ret = length;
 			free(desc);
 			desc = NULL;
+			break;
 	}
 
 	if (ret < 0)
