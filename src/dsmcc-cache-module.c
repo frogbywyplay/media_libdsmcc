@@ -452,14 +452,16 @@ void dsmcc_cache_save_module_data(struct dsmcc_object_carousel *carousel, struct
 				&& module->id.module_id == module_id->module_id
 				&& module->id.module_version == module_id->module_version)
 		{
-			DSMCC_DEBUG("Found Module 0x%04hx Version 0x%02hhx Download ID 0x%08x", module->id.module_id, module->id.module_version, module->id.download_id);
+			DSMCC_DEBUG("Found Module 0x%04hx Version 0x%02hhx Download ID 0x%08x",
+					module->id.module_id, module->id.module_version, module->id.download_id);
 			break;
 		}
 	}
 
 	if (!module)
 	{
-		DSMCC_DEBUG("Cannot find Module 0x%04hx Version 0x%02hhx Download ID 0x%08x", module->id.module_id, module->id.module_version, module->id.download_id);
+		DSMCC_DEBUG("Cannot find Module 0x%04hx Version 0x%02hhx Download ID 0x%08x",
+				module_id->module_id, module_id->module_version, module_id->download_id);
 		return;
 	}
 
