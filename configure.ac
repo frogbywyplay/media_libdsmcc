@@ -83,6 +83,21 @@ else
    CXXFLAGS=$CFLAGS
 fi
 
+######## Tools ########
+AH_TEMPLATE([TOOLS], [Tools.])
+
+AC_ARG_ENABLE(tools,
+   AC_HELP_STRING([--enable-tools], [turn on tools (default=enabled)]),
+   [
+      if test x$enableval == xyes ; then
+         tools=true
+      else
+         tools=false
+      fi
+   ],
+   [ tools=true ]
+)
+AM_CONDITIONAL([TOOLS], test x$tools == xtrue)
 ######## Add input files ########
 
 # REQUIRED_PKG_CONFIG can be used inside dsmcc.pc.in file
@@ -93,6 +108,7 @@ AC_CONFIG_FILES([ Makefile Doxyfile include/Makefile src/Makefile tools/Makefile
 AC_MSG_NOTICE([***** Summary *****])
 AC_MSG_NOTICE([DSMCC DEBUG          : $debug])
 AC_MSG_NOTICE([DSMCC ZLIB           : $zlib])
+AC_MSG_NOTICE([DSMCC TOOLS          : $tools])
 
 AC_OUTPUT
 
