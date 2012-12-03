@@ -11,6 +11,7 @@ bool dsmcc_inflate_file(const char *filename);
 #else
 static inline bool dsmcc_inflate_file(const char *filename)
 {
+	(void) filename;
 	DSMCC_ERROR("Compression support is disabled in this build");
 	return false;
 }
