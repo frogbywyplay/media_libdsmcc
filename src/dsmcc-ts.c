@@ -123,7 +123,15 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 			if (pointer_field >= 0 && pointer_field < 183)
 			{
 				if (pointer_field > 0)
-					memcpy(buf->data + buf->in_section, packet + 5, pointer_field);
+				{
+					if (buf->in_section + pointer_field > DSMCC_TSPARSER_BUFFER_SIZE)
+					{
+						DSMCC_ERROR("Section buffer overflow, no room for %d bytes (buffer is already at %d bytes) (table ID is 0x%02hhx)", pointer_field, buf->in_section, buf->data[0]);
+						memcpy(buf->data + buf->in_section, packet + 5, DSMCC_TSPARSER_BUFFER_SIZE - buf->in_section);
+					}
+					else
+						memcpy(buf->data + buf->in_section, packet + 5, pointer_field);
+				}
 
 				DSMCC_DEBUG("Processing section data PID 0x%hx, buffer length %d", buf->pid, buf->in_section);
 				dsmcc_parse_section(state, pid, buf->data, buf->in_section);
@@ -138,7 +146,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 			}
 			else
 			{
-				/* TODO corrupted ? */
+				/* corrupted ? */
 				DSMCC_ERROR("Invalid pointer field %d", pointer_field);
 			}
 		}
@@ -146,7 +154,6 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 		{
 			buf->in_section = 183;
 			memcpy(buf->data, packet + 5, 183);
-			/* allocate memory and save data (test end ? ) */
 		}
 	}
 	else
@@ -156,7 +163,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 			/* append data to buf */
 			if (buf->in_section + 184 > DSMCC_TSPARSER_BUFFER_SIZE)
 			{
-				DSMCC_ERROR("Section buffer overflow (buffer is already at %d bytes) (table ID is 0x%02hhx)", buf->in_section, buf->data[0]);
+				DSMCC_ERROR("Section buffer overflow, no room for %d bytes (buffer is already at %d bytes) (table ID is 0x%02hhx)", 184, buf->in_section, buf->data[0]);
 				memcpy(buf->data + buf->in_section, packet + 4, DSMCC_TSPARSER_BUFFER_SIZE - buf->in_section);
 				buf->in_section = DSMCC_TSPARSER_BUFFER_SIZE;
 			}
@@ -168,7 +175,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 		}
 		else
 		{
-			/* TODO error ? */
+			/* no start indicator and no current section, ignore packet */
 		}
 	}
 }
