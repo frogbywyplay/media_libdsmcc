@@ -22,6 +22,7 @@ noinst_HEADERS = \
 	dsmcc-biop-message.h \
 	dsmcc-biop-module.h \
 	dsmcc-biop-tap.h \
+	dsmcc-cache.h \
 	dsmcc-cache-file.h \
 	dsmcc-cache-module.h \
 	dsmcc-carousel.h \
@@ -30,7 +31,6 @@ noinst_HEADERS = \
 	dsmcc-debug.h \
 	dsmcc-descriptor.h \
 	dsmcc.h \
-	dsmcc-section.h \
 	dsmcc-ts.h \
 	dsmcc-util.h
 

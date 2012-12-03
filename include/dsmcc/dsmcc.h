@@ -23,6 +23,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
 
 /** \defgroup logging Logging
  *  \{
@@ -66,11 +67,12 @@ typedef uint16_t (dsmcc_stream_subscribe_callback_t)(void *arg, uint16_t assoc_t
 struct dsmcc_state;
 
 /** \brief Initialize the DSM-CC parser
-  * \param tmpdir the temporary directory that will be used. Will be created if not already existent. If NULL, it will default to /tmp/dsmcc-XYZ (where XYZ is the PID of the current process)
+  * \param cachedir the cache directory that will be used. Will be created if not already existent. If NULL, it will default to /tmp/dsmcc-cache-XYZ (where XYZ is the PID of the current process)
+  * \param keep_cache if 0 the cache files will be removed at close
   * \param stream_sub_callback the callback that will be called when the library needs to subscribe to new streams
   * \param stream_sub_callback_arg this will be passed as-is as first argument to the callback
   */
-struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callback_t *stream_sub_callback, void *stream_sub_callback_arg);
+struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, dsmcc_stream_subscribe_callback_t *stream_sub_callback, void *stream_sub_callback_arg);
 
 /** \brief Parse a MPEG Section
   * \param state the library state
@@ -81,7 +83,7 @@ struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callba
   */
 int dsmcc_parse_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, int data_length);
 
-/** \brief Free the memory used by the library
+/** \brief Free the memory used by the library (and the cache files if keep_state was 0 on dsmcc_init call)
   * \param state the library state
   */
 void dsmcc_close(struct dsmcc_state *state);
@@ -110,12 +112,6 @@ enum
 
 	/** Notification of creation */
 	DSMCC_CACHE_CREATED,
-
-	/** Notification of update */
-	DSMCC_CACHE_UPDATED,
-
-	/** Notification of deletion */
-	DSMCC_CACHE_DELETED
 };
 
 /** \brief Callback called for each directory/file in the carousel
@@ -123,9 +119,9 @@ enum
   * \param cid the carousel ID
   * \param type the object type (file or directory)
   * \param reason the reason
-  * \param path the directory/file path in the carousel
+  * \param path the directory/file path relative to the carousel root
   * \param fullpath the directory/file path on disk
-  * \return 0/1 for *_CHECK reasons whether the directory/file should be created or skipped. The return value is not used for *_SAVED reasons.
+  * \return when reason is DSMCC_CACHE_CHECK, return a boolean whether the directory/file should be created (true) or skipped (false). The return value is not used for other values of reason.
   */
 typedef int (dsmcc_cache_callback_t)(void *arg, uint32_t cid, int type, int reason, const char *path, const char *fullpath);
 

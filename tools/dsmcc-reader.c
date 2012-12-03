@@ -79,12 +79,6 @@ static int cache_callback(void *arg, uint32_t cid, int type, int reason, const c
 		case DSMCC_CACHE_CREATED:
 			r = "created";
 			break;
-		case DSMCC_CACHE_UPDATED:
-			r = "updated";
-			break;
-		case DSMCC_CACHE_DELETED:
-			r = "deleted";
-			break;
 		default:
 			r = "?";
 	}
@@ -153,7 +147,7 @@ int main(int argc, char **argv)
 	{
 		dsmcc_set_logger(&logger, DSMCC_LOG_DEBUG);
 
-		state = dsmcc_open("/tmp/dsmcc/tmp", stream_sub_callback, &pid /*&buffers*/);
+		state = dsmcc_open("/tmp/dsmcc/cache", 1, stream_sub_callback, &pid /*&buffers*/);
 
 		dsmcc_tsparser_add_pid(&buffers, pid);
 

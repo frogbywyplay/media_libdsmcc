@@ -20,14 +20,16 @@ int dsmcc_log_enabled(int severity)
 
 void dsmcc_log(int severity, const char *filename, const char *function, int lineno, char *format, ...)
 {
+	int i;
+	char buffer[1024];
+
 	if (!g_logger || g_severity > severity)
 		return;
 
-	char buffer[1024];
-	snprintf(buffer, 1024, "%s:%d %s ", filename, lineno, function);
+	i = snprintf(buffer, 1024, "%s:%d %s ", filename, lineno, function);
 	va_list va;
 	va_start(va, format);
-	vsnprintf(buffer + strlen(buffer), 1024 - strlen(buffer), format, va);
+	vsnprintf(buffer + i, 1024 - i, format, va);
 	va_end(va);
 	(*g_logger)(severity, buffer);
 }

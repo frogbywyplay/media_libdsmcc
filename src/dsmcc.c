@@ -1,4 +1,5 @@
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,36 @@ struct dsmcc_queue_entry
 	struct dsmcc_queue_entry *next, *prev;
 };
 
-struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callback_t *stream_sub_callback, void *stream_sub_callback_arg)
+static void load_state(struct dsmcc_state *state)
+{
+	FILE *f;
+	struct stat s;
+
+	if (stat(state->cachefile, &s) < 0)
+		return;
+
+	DSMCC_DEBUG("Loading cached state");
+
+	f = fopen(state->cachefile, "r");
+	dsmcc_object_carousel_load_all(f, state);
+	fclose(f);
+}
+
+void dsmcc_state_save(struct dsmcc_state *state)
+{
+	FILE *f;
+
+	if (!state->keep_cache)
+		return;
+
+	DSMCC_DEBUG("Saving state");
+
+	f = fopen(state->cachefile, "w");
+	dsmcc_object_carousel_save_all(f, state);
+	fclose(f);
+}
+
+struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, dsmcc_stream_subscribe_callback_t *stream_sub_callback, void *stream_sub_callback_arg)
 {
 	struct dsmcc_state *state = NULL;
 
@@ -27,17 +57,23 @@ struct dsmcc_state *dsmcc_open(const char *tmpdir, dsmcc_stream_subscribe_callba
 	state->stream_sub_callback = stream_sub_callback;
 	state->stream_sub_callback_arg = stream_sub_callback_arg;
 
-	if (tmpdir != NULL && strlen(tmpdir) > 0)
-	{
-		state->tmpdir = strdup(tmpdir);
-	}
-	else
+	if (cachedir == NULL || strlen(cachedir) == 0)
 	{
 		char buffer[32];
-		snprintf(buffer, sizeof(buffer), "/tmp/libdsmcc-%d", getpid());
-		state->tmpdir = strdup(buffer);
+		sprintf(buffer, "/tmp/libdsmcc-cache-%d", getpid());
+		if (buffer[strlen(buffer) - 1] == '/')
+			buffer[strlen(buffer) - 1] = '\0';
+		state->cachedir = strdup(buffer);
 	}
-	dsmcc_mkdir(state->tmpdir, 0755);
+	else
+		state->cachedir = strdup(cachedir);
+	mkdir(state->cachedir, 0755);
+	state->keep_cache = keep_cache;
+
+	state->cachefile = malloc(strlen(state->cachedir) + 7);
+	sprintf(state->cachefile, "%s/state", state->cachedir);
+
+	load_state(state);
 
 	return state;
 }
@@ -111,8 +147,6 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 	str = find_stream_by_pid(state, pid);
 	if (!str && create_if_missing)
 	{
-		DSMCC_DEBUG("Adding stream with pid 0x%hx", pid);
-
 		str = calloc(1, sizeof(struct dsmcc_stream));
 		str->pid = pid;
 		str->next = state->streams;
@@ -176,7 +210,7 @@ struct dsmcc_object_carousel *dsmcc_stream_queue_find(struct dsmcc_stream *strea
 void dsmcc_stream_queue_remove(struct dsmcc_object_carousel *carousel, int type)
 {
 	struct dsmcc_stream *stream;
-	struct dsmcc_queue_entry *entry;
+	struct dsmcc_queue_entry *entry, *next;
 
 	stream = carousel->state->streams;
 	while (stream)
@@ -184,18 +218,18 @@ void dsmcc_stream_queue_remove(struct dsmcc_object_carousel *carousel, int type)
 		entry = stream->queue;
 		while (entry)
 		{
+			next = entry->next;
 			if (entry->carousel == carousel && entry->type == type)
 			{
 				if (entry->prev)
 					entry->prev->next = entry->next;
 				else
 					entry->stream->queue = entry->next;
-				entry->next->prev = entry->prev;
+				if (entry->next)
+					entry->next->prev = entry->prev;
 				free(entry);
-
-				return;
 			}
-			entry = entry->next;
+			entry = next;
 		}
 		stream = stream->next;
 	}
@@ -211,8 +245,9 @@ static void free_queue_entries(struct dsmcc_queue_entry *entry)
 	}
 }
 
-static void free_all_streams(struct dsmcc_stream *stream)
+static void free_all_streams(struct dsmcc_state *state)
 {
+	struct dsmcc_stream *stream = state->streams;
 	while (stream)
 	{
 		struct dsmcc_stream *next = stream->next;
@@ -229,14 +264,19 @@ void dsmcc_close(struct dsmcc_state *state)
 	if (!state)
 		return;
 
-	dsmcc_object_carousel_free_all(state->carousels);
+	dsmcc_object_carousel_free_all(state, state->keep_cache);
 	state->carousels = NULL;
 
-	free_all_streams(state->streams);
+	free_all_streams(state);
 	state->streams = NULL;
 
-	free(state->tmpdir);
+	if (!state->keep_cache)
+	{
+		unlink(state->cachefile);
+		rmdir(state->cachedir);
+	}
 
+	free(state->cachefile);
+	free(state->cachedir);
 	free(state);
 }
-

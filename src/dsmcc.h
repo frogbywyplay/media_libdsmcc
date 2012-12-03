@@ -32,21 +32,18 @@ struct dsmcc_stream
 
 struct dsmcc_state
 {
-	/** path where temporary data will be stored */
-	char *tmpdir;
+	char *cachedir;   /*< path of the directory where cached files will be stored */
+	char *cachefile;  /*< name of the file where cached state will be stored */
+	bool  keep_cache; /*< if the cache should be kept at exit */
 
-	/** Callback called to find the pid for a given assoc_tag */
-	dsmcc_stream_subscribe_callback_t *stream_sub_callback;
+	dsmcc_stream_subscribe_callback_t *stream_sub_callback;     /*< Callback called to find the pid for a given assoc_tag */
+	void                              *stream_sub_callback_arg; /*< Opaque argument for the callback */
 
-	/** Opaque argument for the callback */
-	void                              *stream_sub_callback_arg;
-
-	/** Linked list of streams, used to cache assoc_tag/pid mapping and to queue requests */
-	struct dsmcc_stream               *streams;
-
-	/** Linked list of carousels */
-	struct dsmcc_object_carousel *carousels;
+	struct dsmcc_stream          *streams;   /*< Linked list of streams, used to cache assoc_tag/pid mapping and to queue requests */
+	struct dsmcc_object_carousel *carousels; /*< Linked list of carousels */
 };
+
+void dsmcc_state_save(struct dsmcc_state *state);
 
 struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, bool create_if_missing);
 

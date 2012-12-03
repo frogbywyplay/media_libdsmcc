@@ -117,9 +117,8 @@ bool dsmcc_inflate_file(const char *filename)
 	char *tmpfilename;
 	int ret, tmp;
 
-	tmp = strlen(filename) + 8;
-	tmpfilename = malloc(tmp);
-	snprintf(tmpfilename, tmp, "%s.XXXXXX", filename);
+	tmpfilename = malloc(strlen(filename) + 8);
+	sprintf(tmpfilename, "%s.XXXXXX", filename);
 
 	input = fopen(filename, "r");
 

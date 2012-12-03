@@ -68,41 +68,15 @@ uint32_t dsmcc_crc32(uint8_t *data, uint32_t len)
 	return crc;
 }
 
-void dsmcc_mkdir(const char *name, mode_t mode)
-{
-	char *pos, *namecopy;
-
-	namecopy = strdup(name);
-	pos = namecopy;
-	do
-	{
-		pos = strchr(pos, '/');
-		if (pos != namecopy)
-		{
-			if (pos != NULL)
-				*pos = '\0';
-
-			mkdir(namecopy, mode);
-
-			if (pos != NULL)
-				*pos = '/';
-		}
-		if (pos != NULL)
-			pos++;
-	} while (pos);
-	free(namecopy);
-}
-
 bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int length)
 {
 	int dst = -1, src = -1;
 	char *tmpfile;
 	char data_buf[4096];
-	int rsize, wsize, tmp, ret = 0;
+	int rsize, wsize, ret = 0;
 
-	tmp = strlen(dstfile) + 8;
-	tmpfile = malloc(tmp);
-	snprintf(tmpfile, tmp, "%s.XXXXXX", dstfile);
+	tmpfile = malloc(strlen(dstfile) + 8);
+	sprintf(tmpfile, "%s.XXXXXX", dstfile);
 
 	src = open(srcfile, O_RDONLY);
 	if (src < 0)
@@ -180,6 +154,59 @@ cleanup:
 		close(src);
 	free(tmpfile);
 
+	return ret;
+}
+
+bool dsmcc_file_link(const char *dstfile, const char *srcfile, int length)
+{
+	char *tmpfile;
+	int ret = 1;
+	struct stat s;
+
+	tmpfile = malloc(strlen(dstfile) + 8);
+	sprintf(tmpfile, "%s.XXXXXX", dstfile);
+	if (!mktemp(tmpfile))
+		return 0;
+
+	DSMCC_DEBUG("Linking %s to %s", srcfile, tmpfile);
+	if (link(srcfile, tmpfile) < 0)
+	{
+		if (errno == EXDEV)
+		{
+			DSMCC_DEBUG("Linking failed with EXDEV, trying a copy instead");
+			if (length < 0)
+			{
+				if (stat(srcfile, &s) < 0)
+				{
+					DSMCC_ERROR("Stat '%s' error: %s", srcfile, strerror(errno));
+					ret = 0;
+				}
+				else
+					length = s.st_size;
+			}
+			if (ret)
+				ret = dsmcc_file_copy(dstfile, srcfile, 0, length);
+		}
+		else
+		{
+			DSMCC_ERROR("Link '%s' -> '%s' error: %s", srcfile, tmpfile, strerror(errno));
+			ret = 0;
+		}
+	}
+	else
+	{
+		DSMCC_DEBUG("Renaming %s to %s", tmpfile, dstfile);
+		if (rename(tmpfile, dstfile) < 0)
+		{
+			DSMCC_ERROR("Rename '%s' -> '%s' error: %s", tmpfile, dstfile, strerror(errno));
+			ret = 0;
+		}
+		else
+			ret = 1;
+		unlink(tmpfile);
+	}
+
+	free(tmpfile);
 	return ret;
 }
 

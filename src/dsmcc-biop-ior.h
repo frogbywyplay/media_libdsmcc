@@ -20,7 +20,7 @@ struct biop_obj_location
 
 struct biop_profile_body
 {
-	struct biop_obj_location   obj_loc;
+	struct biop_obj_location    obj_loc;
 	struct biop_dsm_conn_binder conn_binder;
 };
 

@@ -7,8 +7,8 @@
 
 uint32_t dsmcc_crc32(uint8_t *data, uint32_t len);
 
-void dsmcc_mkdir(const char *name, mode_t mode);
 bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int length);
+bool dsmcc_file_link(const char *dstfile, const char *srcfile, int length);
 bool dsmcc_file_write_block(const char *dstfile, int offset, uint8_t *data, int length);
 
 static inline int dsmcc_min(int a, int b)

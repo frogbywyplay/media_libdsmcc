@@ -1,4 +1,3 @@
-/* for asprintf */
 #define _GNU_SOURCE
 
 #include <stdlib.h>
@@ -8,48 +7,146 @@
 
 #include "dsmcc.h"
 #include "dsmcc-cache-module.h"
+#include "dsmcc-cache-file.h"
 #include "dsmcc-carousel.h"
 #include "dsmcc-debug.h"
 #include "dsmcc-util.h"
 #include "dsmcc-compress.h"
 #include "dsmcc-biop-message.h"
 
-struct dsmcc_module
+/* list of directory entries */
+struct dsmcc_module_dentry_list
 {
-	struct dsmcc_module_id   id;
-	struct dsmcc_module_info info;
+	struct dsmcc_module_dentry *first, *last;
+};
 
-	bool     completed;
+/* directory entry in a completed module */
+struct dsmcc_module_dentry
+{
+	bool                   dir;
+	struct dsmcc_object_id id;
+
+	/* not for top-level dentries */
+	char *name;
+
+	/* only for files */
+	char    *data_file;
+	uint32_t data_size;
+
+	/* only for dirs */
+	struct dsmcc_module_dentry_list dentries;
+
+	struct dsmcc_module_dentry *next;
+};
+
+
+/* data for module whose download is in progress */
+struct dsmcc_module_partial
+{
+	uint32_t module_size;
+	uint32_t block_size;
+
+	bool     compressed;
+	uint8_t  compress_method;
+	uint32_t uncompressed_size;
+
 	char    *data_file;
 	uint32_t block_count;
 	uint32_t downloaded_block_count;
 	uint8_t *blocks;
+};
+
+/* data for completed module */
+struct dsmcc_module_complete
+{
+	struct dsmcc_module_dentry     *gateway;
+	struct dsmcc_module_dentry_list dentries;
+};
+
+/* module state */
+enum
+{
+	DSMCC_MODULE_STATE_PARTIAL = 0,
+	DSMCC_MODULE_STATE_COMPLETE,
+	DSMCC_MODULE_STATE_INVALID
+};
+
+/* module */
+struct dsmcc_module
+{
+	struct dsmcc_module_id   id;
+	int                      state;
+
+	union
+	{
+		struct dsmcc_module_partial partial;
+		struct dsmcc_module_complete complete;
+	} data;
 
 	struct dsmcc_module *next, *prev;
 };
 
-static void free_module_data(struct dsmcc_module *module)
+static void free_dentries(struct dsmcc_module_dentry_list *list, bool keep_cache)
 {
-	if (module->blocks)
+	struct dsmcc_module_dentry *dentry, *next;
+	
+	dentry = list->first;
+	while (dentry)
 	{
-		free(module->blocks);
-		module->blocks = NULL;
+		if (dentry->name)
+			free(dentry->name);
+		if (dentry->dir)
+			free_dentries(&dentry->dentries, keep_cache);
+		else
+		{
+			if (dentry->data_file)
+			{
+				if (!keep_cache)
+					unlink(dentry->data_file);
+				free(dentry->data_file);
+			}
+		}
+		next = dentry->next;
+		free(dentry);
+		dentry = next;
 	}
 
-	if (module->data_file)
-	{
-		unlink(module->data_file);
-		free(module->data_file);
-		module->data_file = NULL;
-	}
-
-	module->block_count = 0;
-	module->downloaded_block_count = 0;
+	list->first = NULL;
+	list->last = NULL;
 }
 
-static void free_module(struct dsmcc_object_carousel *carousel, struct dsmcc_module *module)
+static void free_module_data(struct dsmcc_module *module, bool keep_cache)
 {
-	free_module_data(module);
+	switch (module->state)
+	{
+		case DSMCC_MODULE_STATE_PARTIAL:
+			if (module->data.partial.blocks)
+			{
+				free(module->data.partial.blocks);
+				module->data.partial.blocks = NULL;
+			}
+
+			if (module->data.partial.data_file)
+			{
+				if (!keep_cache)
+					unlink(module->data.partial.data_file);
+				free(module->data.partial.data_file);
+				module->data.partial.data_file = NULL;
+			}
+
+			module->data.partial.block_count = 0;
+			module->data.partial.downloaded_block_count = 0;
+			break;
+		case DSMCC_MODULE_STATE_COMPLETE:
+			free_dentries(&module->data.complete.dentries, keep_cache);
+			break;
+	}
+	module->state = DSMCC_MODULE_STATE_INVALID;
+}
+
+static void free_module(struct dsmcc_object_carousel *carousel, struct dsmcc_module *module, bool keep_cache)
+{
+	free_module_data(module, keep_cache);
 
 	if (module->prev)
 	{
@@ -67,36 +164,208 @@ static void free_module(struct dsmcc_object_carousel *carousel, struct dsmcc_mod
 	free(module);
 }
 
-void dsmcc_cache_free_all_modules(struct dsmcc_object_carousel *carousel)
+void dsmcc_cache_free_all_modules(struct dsmcc_object_carousel *carousel, bool keep_cache)
 {
 	while (carousel->modules)
-		free_module(carousel, carousel->modules);
+		free_module(carousel, carousel->modules, keep_cache);
+}
+
+static struct dsmcc_module_dentry *add_dentry(struct dsmcc_module_dentry_list *list, bool dir, struct dsmcc_object_id *id, char *name)
+{
+	struct dsmcc_module_dentry *dentry;
+
+	dentry = calloc(1, sizeof(struct dsmcc_module_dentry));
+	dentry->dir = dir;
+	memcpy(&dentry->id, id, sizeof(struct dsmcc_object_id));
+	if (name)
+		dentry->name = name;
+
+	if (list->last)
+	{
+		list->last->next = dentry;
+		list->last = dentry;
+	}
+	else
+	{
+		list->first = dentry;
+		list->last = dentry;
+	}
+
+	return dentry;
+}
+
+static void add_dir_dentry(struct dsmcc_module_complete *module_data, struct biop_msg_dir *msg)
+{
+	struct dsmcc_module_dentry *dentry;
+	struct biop_msg_dentry *d;
+
+	dentry = add_dentry(&module_data->dentries, 1, &msg->id, NULL);
+	if (msg->gateway)
+		module_data->gateway = dentry;
+
+	d = msg->first_dentry;
+	while (d)
+	{
+		add_dentry(&dentry->dentries, d->dir, &d->id, strdup(d->name));
+		d = d->next;
+	}
+}
+
+static void add_file_dentry(struct dsmcc_module_complete *module_data, const char *fileprefix, struct biop_msg_file *msg)
+{
+	char *fn;
+	struct dsmcc_module_dentry *dentry;
+
+	fn = malloc(strlen(fileprefix) + 10);
+	switch (msg->id.key_mask)
+	{
+		case 0xff:
+			sprintf(fn, "%s-%02x", fileprefix, msg->id.key & msg->id.key_mask);
+			break;
+		case 0xffff:
+			sprintf(fn, "%s-%04x", fileprefix, msg->id.key & msg->id.key_mask);
+			break;
+		case 0xffffff:
+			sprintf(fn, "%s-%06x", fileprefix, msg->id.key & msg->id.key_mask);
+			break;
+		default:
+			sprintf(fn, "%s-%08x", fileprefix, msg->id.key & msg->id.key_mask);
+			break;
+	}
+
+	if (!dsmcc_file_copy(fn, msg->data_file, msg->data_offset, msg->data_length))
+		return;
+
+	dentry = add_dentry(&module_data->dentries, 0, &msg->id, NULL);
+	dentry->data_file = fn;
+	dentry->data_size = msg->data_length;
+}
+
+static void update_filecache(struct dsmcc_object_carousel *carousel, struct dsmcc_module *module)
+{
+	struct dsmcc_module_dentry *dentry, *dentry2;
+
+	if (module->state != DSMCC_MODULE_STATE_COMPLETE)
+		return;
+
+	if (module->data.complete.gateway)
+		dsmcc_filecache_cache_dir(carousel, NULL, &module->data.complete.gateway->id, NULL);
+
+	for (dentry = module->data.complete.dentries.first; dentry; dentry = dentry->next)
+	{
+		if (dentry->dir)
+		{
+			for (dentry2 = dentry->dentries.first; dentry2; dentry2 = dentry2->next)
+			{
+				if (dentry2->dir)
+					dsmcc_filecache_cache_dir(carousel, &dentry->id, &dentry2->id, dentry2->name);
+				else
+					dsmcc_filecache_cache_file(carousel, &dentry->id, &dentry2->id, dentry2->name);
+			}
+		}
+		else
+		{
+			dsmcc_filecache_cache_data(carousel, &dentry->id, dentry->data_file, dentry->data_size);
+		}
+	}
 }
 
 static void process_module(struct dsmcc_object_carousel *carousel, struct dsmcc_module *module)
 {
-	DSMCC_DEBUG("Processing module 0x%04hx version 0x%02hhx in carousel 0x%08x (data file is %s)", module->id.module_id, module->id.module_version, carousel->cid, module->data_file);
+	int ret;
+	char *data_file;
+	uint32_t size;
+	struct biop_msg *messages, *msg;
 
-	if (module->info.compressed)
+	if (module->state != DSMCC_MODULE_STATE_PARTIAL)
+		return;
+
+	if (module->data.partial.downloaded_block_count != module->data.partial.block_count)
+		return;
+
+	DSMCC_DEBUG("Processing module 0x%04hx version 0x%02hhx in carousel 0x%08x (data file is %s)", module->id.module_id, module->id.module_version, carousel->cid, module->data.partial.data_file);
+
+	if (module->data.partial.compressed)
 	{
 		DSMCC_DEBUG("Processing compressed module data");
-		if (!dsmcc_inflate_file(module->data_file))
+		if (!dsmcc_inflate_file(module->data.partial.data_file))
 		{
 			DSMCC_ERROR("Error while processing compressed module");
 			return;
 		}
-		dsmcc_biop_parse_data(carousel->filecache, &module->id, module->data_file, module->info.uncompressed_size);
+		size = module->data.partial.uncompressed_size;
 	}
 	else
 	{
 		DSMCC_DEBUG("Processing uncompressed module data");
-		dsmcc_biop_parse_data(carousel->filecache, &module->id, module->data_file, module->info.module_size);
+		size = module->data.partial.module_size;
 	}
 
-	module->completed = 1;
+	ret = dsmcc_biop_msg_parse_data(&messages, &module->id, module->data.partial.data_file, size);
+	if (ret < 0)
+	{
+		DSMCC_ERROR("Error while parsing module 0x%04hx", module->id.module_id);
+		free_module_data(module, 0);
+		return;
+	}
 
-	DSMCC_DEBUG("Removing data for %smodule 0x%04hx version 0x%02hhx in carousel 0x%08x", module->completed ? "completed " : "", module->id.module_id, module->id.module_version, carousel->cid);
-	free_module_data(module);
+	data_file = strdup(module->data.partial.data_file);
+	free_module_data(module, 1);
+	module->state = DSMCC_MODULE_STATE_COMPLETE;
+	memset(&module->data.complete, 0, sizeof(struct dsmcc_module_complete));
+
+	msg = messages;
+	while (msg)
+	{
+		switch (msg->type)
+		{
+			case BIOP_MSG_DIR:
+				add_dir_dentry(&module->data.complete, &msg->msg.dir);
+				break;
+			case BIOP_MSG_FILE:
+				add_file_dentry(&module->data.complete, data_file, &msg->msg.file);
+				break;
+		}
+		msg = msg->next;
+	}
+	dsmcc_biop_msg_free_all(messages);
+
+	unlink(data_file);
+	free(data_file);
+
+	update_filecache(carousel, module);
+}
+
+void dsmcc_cache_update_filecache(struct dsmcc_object_carousel *carousel)
+{
+	struct dsmcc_module *module;
+	for (module = carousel->modules; module; module = module->next)
+		update_filecache(carousel, module);
+}
+
+void dsmcc_cache_remove_unneeded_modules(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *modules_id, int number_modules)
+{
+	struct dsmcc_module *module, *next;
+	int i, ok;
+
+	for (module = carousel->modules; module; module = next)
+	{
+		ok = 0;
+		for (i = 0; i < number_modules; i++)
+		{
+			if (module->id.module_id == modules_id[i].module_id)
+			{
+				ok = 1;
+				break;
+			}
+		}
+		next = module->next;
+		if (!ok)
+		{
+			DSMCC_DEBUG("Removing Module 0x%04hx Version 0x%02hhx", module->id.module_id, module->id.module_version);
+			free_module(carousel, module, 0);
+		}
+	}
 }
 
 /**
@@ -104,61 +373,66 @@ static void process_module(struct dsmcc_object_carousel *carousel, struct dsmcc_
   */
 void dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *module_id, struct dsmcc_module_info *module_info)
 {
-	int i;
 	struct dsmcc_module *module;
 
 	for (module = carousel->modules; module; module = module->next)
 	{
 		if (module->id.module_id == module_id->module_id)
 		{
-			if (module->id.module_version == module_id->module_version)
+			if (module->id.module_version == module_id->module_version && module->state != DSMCC_MODULE_STATE_INVALID)
 			{
 				/* Already know this version */
-				DSMCC_DEBUG("Already Know Module 0x%04hx Version 0x%02hhx", module_id->module_id, module_id->module_version);
+				DSMCC_DEBUG("Up-to-Date Module 0x%04hx Version 0x%02hhx",
+						module_id->module_id, module_id->module_version);
 				return;
 			}
 			else
 			{
 				/* New version, drop old data */
-				DSMCC_DEBUG("Updating Module 0x%04hx Download ID 0x%08x -> 0x%08x Version 0x%02hhx -> 0x%02hhx",
-						module_id->module_id, module->id.download_id, module_id->download_id, module->id.module_version, module_id->module_version);
-				free_module(carousel, module);
+				DSMCC_DEBUG("Updating Module 0x%04hx Version 0x%02hhx -> 0x%02hhx",
+						module_id->module_id, module->id.module_version, module_id->module_version);
+				free_module_data(module, 0);
 				break;
 			}
 		}
 	}
 
-	DSMCC_DEBUG("Saving info for module 0x%04hx (Download ID 0x%08x)", module_id->module_id, module_id->download_id);
+	DSMCC_DEBUG("Saving info for Module 0x%04hx Version 0x%02hhx", module_id->module_id, module_id->module_version);
 
-	module = calloc(1, sizeof(struct dsmcc_module));
+	if (!module)
+		module = calloc(1, sizeof(struct dsmcc_module));
+	module->state = DSMCC_MODULE_STATE_PARTIAL;
 	memcpy(&module->id, module_id, sizeof(struct dsmcc_module_id));
-	memcpy(&module->info, module_info, sizeof(struct dsmcc_module_info));
+	memset(&module->data.partial, 0, sizeof(struct dsmcc_module_partial));
+	module->data.partial.module_size = module_info->module_size;
+	module->data.partial.block_size = module_info->block_size;
+	module->data.partial.compressed = module_info->compressed;
+	module->data.partial.compress_method = module_info->compress_method;
+	module->data.partial.uncompressed_size = module_info->uncompressed_size;
 	module->next = carousel->modules;
 	if (module->next)
 		module->next->prev = module;
 	carousel->modules = module;
 
-	module->downloaded_block_count = 0;
-	module->block_count = module->info.module_size / module->info.block_size;
-	if (module->info.module_size - module->block_count * module->info.block_size > 0)
-		module->block_count++;
-	i = (module->block_count + 7) >> 3;
-	module->blocks = calloc(1, i);
-	DSMCC_DEBUG("Allocated %d byte(s) to store block status for %d block(s) of module 0x%04hx", i, module->block_count, module->id.module_id);
+	module->data.partial.downloaded_block_count = 0;
+	module->data.partial.block_count = module->data.partial.module_size / module->data.partial.block_size;
+	if (module->data.partial.module_size - module->data.partial.block_count * module->data.partial.block_size > 0)
+		module->data.partial.block_count++;
 
-	i = strlen(carousel->state->tmpdir) + 32;
-	module->data_file = malloc(i);
-	snprintf(module->data_file, i, "%s/%08x-%08x-%04hx-%02hhx.data", carousel->state->tmpdir, carousel->cid, module->id.download_id, module->id.module_id, module->id.module_version);
+	module->data.partial.data_file = malloc(strlen(carousel->state->cachedir) + 18);
+	sprintf(module->data.partial.data_file, "%s/%08x-%04hx-%02hhx", carousel->state->cachedir, carousel->cid, module->id.module_id, module->id.module_version);
+	unlink(module->data.partial.data_file);
 }
 
-static void update_carousel_completion(struct dsmcc_object_carousel *carousel)
+void dsmcc_cache_update_carousel_completion(struct dsmcc_object_carousel *carousel)
 {
 	struct dsmcc_module *module;
 
 	for (module = carousel->modules; module; module = module->next)
-		if (!module->completed)
+		if (module->state != DSMCC_MODULE_STATE_COMPLETE)
 			return;
 
+	DSMCC_DEBUG("Carousel 0x%08x is complete.", carousel->cid);
 	carousel->complete = 1;
 }
 
@@ -178,55 +452,264 @@ void dsmcc_cache_save_module_data(struct dsmcc_object_carousel *carousel, struct
 				&& module->id.module_id == module_id->module_id
 				&& module->id.module_version == module_id->module_version)
 		{
-			DSMCC_DEBUG("Found linking module (0x%08x/0x%04hx/0x%02hhx)...", module->id.download_id, module->id.module_id, module->id.module_version);
+			DSMCC_DEBUG("Found Module 0x%04hx Version 0x%02hhx Download ID 0x%08x", module->id.module_id, module->id.module_version, module->id.download_id);
 			break;
 		}
 	}
 
 	if (!module)
 	{
-		DSMCC_DEBUG("Linking module not found (0x%08x/0x%04hx/0x%02hhx)", module_id->download_id, module_id->module_id, module_id->module_version);
+		DSMCC_DEBUG("Cannot find Module 0x%04hx Version 0x%02hhx Download ID 0x%08x", module->id.module_id, module->id.module_version, module->id.download_id);
 		return;
 	}
 
-	if (module->completed)
-	{
-		/* Already got it */
-		DSMCC_DEBUG("Module 0x%04hx already completely downloaded", module->id.module_id);
-	}
-	else
+	if (module->state == DSMCC_MODULE_STATE_PARTIAL)
 	{
 		/* Check that DDB size is equal to module block size (or smaller for last block) */
-		if (((uint32_t)length) > module->info.block_size)
+		if (((uint32_t)length) > module->data.partial.block_size)
 		{
-			DSMCC_WARN("DDB block length is bigger than module block size (%d > %u), dropping excess data", length, module->info.block_size);
-			length = module->info.block_size;
+			DSMCC_WARN("DDB block length is bigger than module block size (%d > %u), dropping excess data", length, module->data.partial.block_size);
+			length = module->data.partial.block_size;
 		}
-		else if (((uint32_t) length) != module->info.block_size && block_number != module->block_count - 1)
+		else if (((uint32_t) length) != module->data.partial.block_size && block_number != module->data.partial.block_count - 1)
 		{
-			DSMCC_ERROR("DDB block length is smaller than module block size (%d < %u)", length, module->info.block_size);
+			DSMCC_ERROR("DDB block length is smaller than module block size (%d < %u)", length, module->data.partial.block_size);
 			return;
 		}
 
+		if (!module->data.partial.blocks)
+			module->data.partial.blocks = calloc(1, (module->data.partial.block_count + 7) >> 3);
+
 		/* Check if we have this block already or not. If not save it to disk */
-		if ((module->blocks[block_number >> 3] & (1 << (block_number & 7))) == 0)
+		if ((module->data.partial.blocks[block_number >> 3] & (1 << (block_number & 7))) == 0)
 		{
-			if (!dsmcc_file_write_block(module->data_file, block_number * module->info.block_size, data, length))
+			if (!dsmcc_file_write_block(module->data.partial.data_file, block_number * module->data.partial.block_size, data, length))
 			{
 				DSMCC_ERROR("Error while writing block %hu of module 0x%hx", block_number, module->id.module_id);
 				return;
 			}
-			module->downloaded_block_count++;
-			module->blocks[block_number >> 3] |= (1 << (block_number & 7));
+			module->data.partial.downloaded_block_count++;
+			module->data.partial.blocks[block_number >> 3] |= (1 << (block_number & 7));
 		}
 
-		DSMCC_DEBUG("Module 0x%04hx Downloaded blocks %d/%d", module->id.module_id, module->downloaded_block_count, module->block_count);
+		DSMCC_DEBUG("Module 0x%04hx Downloaded blocks %d/%d", module->id.module_id, module->data.partial.downloaded_block_count, module->data.partial.block_count);
 
 		/* If we have all blocks for this module, process it */
-		if (module->downloaded_block_count == module->block_count)
+		if (module->data.partial.downloaded_block_count == module->data.partial.block_count)
 		{
 			process_module(carousel, module);
-			update_carousel_completion(carousel);
+			dsmcc_cache_update_carousel_completion(carousel);
 		}
 	}
+	else
+	{
+		DSMCC_DEBUG("Skipping data block for module 0x%04hx (module already downloaded or invalid)", module->id.module_id);
+	}
+}
+
+static bool load_dentries(FILE *f, struct dsmcc_module_dentry **gateway, struct dsmcc_module_dentry_list *dentries)
+{
+	uint32_t tmp, isgateway;
+	struct dsmcc_module_dentry *dentry;
+	bool dir;
+	struct dsmcc_object_id id;
+	char *name;
+
+	while (1)
+	{
+		if (!fread(&tmp, 1, sizeof(uint32_t), f))
+			return 0;
+		if (tmp)
+			break;
+		if (!fread(&isgateway, 1, sizeof(uint32_t), f))
+			return 0;
+		if (!fread(&dir, 1, sizeof(bool), f))
+			return 0;
+		if (!fread(&id.module_id, 1, sizeof(uint16_t), f))
+			return 0;
+		if (!fread(&id.key, 1, sizeof(uint32_t), f))
+			return 0;
+		if (!fread(&id.key_mask, 1, sizeof(uint32_t), f))
+			return 0;
+		if (!fread(&tmp, 1, sizeof(uint32_t), f))
+			return 0;
+		if (tmp)
+		{
+			name = malloc(tmp);
+			if (!fread(name, 1, tmp, f))
+			{
+				free(name);
+				return 0;
+			}
+		}
+		else
+			name = NULL;
+		dentry = add_dentry(dentries, dir, &id, name);
+		if (isgateway && gateway)
+			*gateway = dentry;
+		if (dentry->dir)
+		{
+			if (!load_dentries(f, NULL, &dentry->dentries))
+				return 0;
+		}
+		else
+		{
+			if (!fread(&tmp, 1, sizeof(uint32_t), f))
+				return 0;
+			if (tmp)
+			{
+				dentry->data_file = malloc(tmp);
+				if (!fread(dentry->data_file, 1, tmp, f))
+					return 0;
+			}
+			if (!fread(&dentry->data_size, 1, sizeof(uint32_t), f))
+				return 0;
+		}
+	}
+
+	return 1;
+}
+
+bool dsmcc_cache_load_modules(FILE *f, struct dsmcc_object_carousel *carousel)
+{
+	struct dsmcc_module *module = NULL, *lastmod = NULL;
+	uint32_t tmp;
+
+	while (1)
+	{
+		if (!fread(&tmp, 1, sizeof(uint32_t), f))
+			goto error;
+		if (tmp)
+			break;
+		module = calloc(1, sizeof(struct dsmcc_module));
+		module->state = DSMCC_MODULE_STATE_INVALID;
+		if (!fread(&module->id.download_id, 1, sizeof(uint32_t), f))
+			goto error;
+		if (!fread(&module->id.module_id, 1, sizeof(uint16_t), f))
+			goto error;
+		if (!fread(&module->id.module_version, 1, sizeof(uint8_t), f))
+			goto error;
+		if (!fread(&module->state, 1, sizeof(int), f))
+			goto error;
+		switch (module->state)
+		{
+			case DSMCC_MODULE_STATE_PARTIAL:
+				if (!fread(&module->data.partial.module_size, 1, sizeof(uint32_t), f))
+					goto error;
+				if (!fread(&module->data.partial.block_size, 1, sizeof(uint32_t), f))
+					goto error;
+				if (!fread(&module->data.partial.compressed, 1, sizeof(bool), f))
+					goto error;
+				if (!fread(&module->data.partial.compress_method, 1, sizeof(uint8_t), f))
+					goto error;
+				if (!fread(&module->data.partial.uncompressed_size, 1, sizeof(uint32_t), f))
+					goto error;
+				if (!fread(&tmp, 1, sizeof(uint32_t), f))
+					goto error;
+				module->data.partial.data_file = malloc(tmp);
+				if (!fread(module->data.partial.data_file, 1, tmp, f))
+					goto error;
+				if (!fread(&module->data.partial.block_count, 1, sizeof(uint32_t), f))
+					goto error;
+				if (!fread(&module->data.partial.downloaded_block_count, 1, sizeof(uint32_t), f))
+					goto error;
+				break;
+			case DSMCC_MODULE_STATE_COMPLETE:
+				if (!load_dentries(f, &module->data.complete.gateway, &module->data.complete.dentries))
+					goto error;
+				break;
+		}
+		if (carousel->modules)
+			lastmod->next = module;
+		else
+			carousel->modules = module;
+		lastmod = module;
+		module = NULL;
+	}
+
+	/* TODO check that module files are present and have the correct size */
+	dsmcc_cache_update_carousel_completion(carousel);
+	return 1;
+error:
+	dsmcc_cache_free_all_modules(carousel, 0);
+	if (module)
+	{
+		free_module_data(module, 0);
+		free(module);
+	}
+	return 0;
+}
+
+static void save_dentries(FILE *f, struct dsmcc_module_dentry_list *dentries, struct dsmcc_module_dentry *gateway)
+{
+	uint32_t tmp;
+	struct dsmcc_module_dentry *dentry;
+
+	for (dentry = dentries->first; dentry; dentry = dentry->next)
+	{
+		tmp = 0;
+		fwrite(&tmp, 1, sizeof(uint32_t), f);
+		tmp = dentry == gateway ? 1 : 0;
+		fwrite(&tmp, 1, sizeof(uint32_t), f);
+		fwrite(&dentry->dir, 1, sizeof(bool), f);
+		fwrite(&dentry->id.module_id, 1, sizeof(uint16_t), f);
+		fwrite(&dentry->id.key, 1, sizeof(uint32_t), f);
+		fwrite(&dentry->id.key_mask, 1, sizeof(uint32_t), f);
+		tmp = dentry->name ? strlen(dentry->name) + 1 : 0;
+		fwrite(&tmp, 1, sizeof(uint32_t), f);
+		if (tmp)
+			fwrite(dentry->name, 1, tmp, f);
+		if (dentry->dir)
+		{
+			save_dentries(f, &dentry->dentries, NULL);
+		}
+		else
+		{
+			tmp = dentry->data_file ? strlen(dentry->data_file) + 1 : 0;
+			fwrite(&tmp, 1, sizeof(uint32_t), f);
+			if (tmp)
+				fwrite(dentry->data_file, 1, tmp, f);
+			fwrite(&dentry->data_size, 1, sizeof(uint32_t), f);
+		}
+	}
+	tmp = 1;
+	fwrite(&tmp, 1, sizeof(uint32_t), f);
+}
+
+void dsmcc_cache_save_modules(FILE *f, struct dsmcc_object_carousel *carousel)
+{
+	struct dsmcc_module *module;
+	uint32_t tmp;
+
+	module = carousel->modules;
+	while (module)
+	{
+		tmp = 0;
+		fwrite(&tmp, 1, sizeof(uint32_t), f);
+		fwrite(&module->id.download_id, 1, sizeof(uint32_t), f);
+		fwrite(&module->id.module_id, 1, sizeof(uint16_t), f);
+		fwrite(&module->id.module_version, 1, sizeof(uint8_t), f);
+		fwrite(&module->state, 1, sizeof(int), f);
+		switch (module->state)
+		{
+			case DSMCC_MODULE_STATE_PARTIAL:
+				fwrite(&module->data.partial.module_size, 1, sizeof(uint32_t), f);
+				fwrite(&module->data.partial.block_size, 1, sizeof(uint32_t), f);
+				fwrite(&module->data.partial.compressed, 1, sizeof(bool), f);
+				fwrite(&module->data.partial.compress_method, 1, sizeof(uint8_t), f);
+				fwrite(&module->data.partial.uncompressed_size, 1, sizeof(uint32_t), f);
+				tmp = strlen(module->data.partial.data_file) + 1;
+				fwrite(&tmp, 1, sizeof(uint32_t), f);
+				fwrite(module->data.partial.data_file, 1, tmp, f);
+				fwrite(&module->data.partial.block_count, 1, sizeof(uint32_t), f);
+				fwrite(&module->data.partial.downloaded_block_count, 1, sizeof(uint32_t), f);
+				break;
+			case DSMCC_MODULE_STATE_COMPLETE:
+				save_dentries(f, &module->data.complete.dentries, module->data.complete.gateway);
+				break;
+		}
+		module = module->next;
+	}
+	tmp = 1;
+	fwrite(&tmp, 1, sizeof(uint32_t), f);
 }
