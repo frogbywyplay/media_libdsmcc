@@ -251,29 +251,6 @@ static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *da
 	return off;
 }
 
-#if 0
-static bool find_module(struct dsmcc_module_id *module_id, struct dsmcc_module_id *modules_id, int number_modules)
-{
-	int i;
-	for (i = 0; i < number_modules; i++)
-		if (modules_id[i].module_id == module_id->module_id && modules_id[i].module_version == module_id->module_version)
-			return 1;
-	return 0;
-}
-
-static void remove_outdated_modules(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *modules_id, int number_modules)
-{
-	struct dsmcc_module *module = carousel->modules, *next;
-	while (module)
-	{
-		next = module->next;
-		if (!find_module(&module->id, modules_id, number_modules))
-			dsmcc_cache_free_module(carousel, module, 0);
-		module = next;
-	}
-}
-#endif
-
 /*
  * ETSI TR 101 202 Table A.4
  */
@@ -372,7 +349,7 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 
 	/* remove outdated modules and files */
 	dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
-	dsmcc_filecache_free(carousel, 1);
+	dsmcc_cache_clear_filecache(carousel);
 	dsmcc_cache_remove_unneeded_modules(carousel, modules_id, number_modules);
 
 	/* add modules info to module cache */
@@ -385,7 +362,6 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 				DSMCC_STREAM_SELECTOR_ASSOC_TAG, assoc_tags[i],
 				DSMCC_QUEUE_ENTRY_DDB, download_id);
 	}
-	dsmcc_cache_update_carousel_completion(carousel);
 
 	free(modules_id);
 	free(modules_info);

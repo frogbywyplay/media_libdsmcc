@@ -43,7 +43,7 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 	if (car)
 	{
 		dsmcc_stream_queue_remove(car, DSMCC_QUEUE_ENTRY_DSI);
-		dsmcc_filecache_free(car, 1);
+		dsmcc_cache_clear_filecache(car);
 		free(car->downloadpath);
 	}
 	else
@@ -54,6 +54,7 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 		state->carousels = car;
 	}
 
+	car->complete = 0;
 	car->downloadpath = strdup(downloadpath);
 	if (downloadpath[strlen(downloadpath) - 1] == '/')
 		car->downloadpath[strlen(downloadpath) - 1] = '\0';
@@ -63,8 +64,6 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 	car->requested_pid = pid;
 	car->requested_transaction_id = transaction_id;
 	dsmcc_stream_queue_add(car, DSMCC_STREAM_SELECTOR_PID, pid, DSMCC_QUEUE_ENTRY_DSI, transaction_id);
-
-	dsmcc_cache_update_filecache(car);
 
 	return 1;
 }
