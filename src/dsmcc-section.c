@@ -83,6 +83,9 @@ static int parse_section_header(struct dsmcc_section_header *header, uint8_t *da
 	/* skip unused fields */
 	off += 3;
 
+	/* adjust section length for header fields after length field (table ID extension and unused fields */
+	header->length -= 5;
+
 	return off;
 }
 
