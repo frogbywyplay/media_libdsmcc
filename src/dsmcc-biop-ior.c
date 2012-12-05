@@ -40,8 +40,12 @@ static int parse_dsm_conn_binder(struct biop_dsm_conn_binder *binder, uint8_t *d
 
 	if (!dsmcc_getlong(&binder->transaction_id, tap->selector_data, 2, tap->selector_length))
 		goto error;
+	DSMCC_DEBUG("Transaction ID = 0x%08x", binder->transaction_id);
+
 	if (!dsmcc_getlong(&binder->timeout, tap->selector_data, 6, tap->selector_length))
 		goto error;
+	DSMCC_DEBUG("Timeout = %u", binder->timeout);
+
 	binder->assoc_tag = tap->assoc_tag;
 
 	dsmcc_biop_free_tap(tap);
@@ -61,12 +65,12 @@ static int parse_obj_location(struct biop_obj_location *loc, uint8_t *data, int 
 	if (!dsmcc_getlong(&loc->carousel_id, data, off, data_length))
 		return -1;
 	off += 4;
-	DSMCC_DEBUG("Carousel id = 0x%08x", loc->carousel_id);
+	DSMCC_DEBUG("Carousel ID = 0x%08x", loc->carousel_id);
 
 	if (!dsmcc_getshort(&loc->module_id, data, off, data_length))
 		return -1;
 	off += 2;
-	DSMCC_DEBUG("Module id = 0x%04x", loc->module_id);
+	DSMCC_DEBUG("Module ID = 0x%04x", loc->module_id);
 
 	if (!dsmcc_getshort(&version, data, off, data_length))
 		return -1;
@@ -245,7 +249,7 @@ int dsmcc_biop_parse_ior(struct biop_ior *ior, uint8_t *data, int data_length)
 		if (!dsmcc_getlong(&profile_id_tag, data, off, data_length))
 			return -1;
 		off += 4;
-		DSMCC_DEBUG("Profile Id Tag = %08x", profile_id_tag);
+		DSMCC_DEBUG("Profile ID Tag = %08x", profile_id_tag);
 
 		if (!dsmcc_getlong(&profile_data_length, data, off, data_length))
 			return -1;
@@ -265,7 +269,7 @@ int dsmcc_biop_parse_ior(struct biop_ior *ior, uint8_t *data, int data_length)
 				DSMCC_WARN("Already got a BIOPProfileBody, skipping profile %d", i);
 		}
 		else
-			DSMCC_WARN("Skipping Unknown Profile %d Id Tag 0x%08x Size %u", i, profile_id_tag, profile_data_length);
+			DSMCC_WARN("Skipping Unknown Profile %d ID Tag 0x%08x Size %u", i, profile_id_tag, profile_data_length);
 
 		off += profile_data_length;
 	}
