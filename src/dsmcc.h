@@ -36,8 +36,7 @@ struct dsmcc_state
 	char *cachefile;  /*< name of the file where cached state will be stored */
 	bool  keep_cache; /*< if the cache should be kept at exit */
 
-	dsmcc_stream_subscribe_callback_t *stream_sub_callback;     /*< Callback called to find the pid for a given assoc_tag */
-	void                              *stream_sub_callback_arg; /*< Opaque argument for the callback */
+	struct dsmcc_dvb_callbacks callbacks;    /*< Callbacks called to interract with DVB stack */
 
 	struct dsmcc_stream          *streams;   /*< Linked list of streams, used to cache assoc_tag/pid mapping and to queue requests */
 	struct dsmcc_object_carousel *carousels; /*< Linked list of carousels */
@@ -48,7 +47,7 @@ void dsmcc_state_save(struct dsmcc_state *state);
 struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, bool create_if_missing);
 
 struct dsmcc_object_carousel *dsmcc_stream_queue_find(struct dsmcc_stream *stream, int type, uint32_t id);
-void dsmcc_stream_queue_add(struct dsmcc_object_carousel *carousel, int stream_selector_type, uint16_t stream_selector, int type, uint32_t id);
+struct dsmcc_stream *dsmcc_stream_queue_add(struct dsmcc_object_carousel *carousel, int stream_selector_type, uint16_t stream_selector, int type, uint32_t id);
 void dsmcc_stream_queue_remove(struct dsmcc_object_carousel *carousel, int type);
 
 #endif

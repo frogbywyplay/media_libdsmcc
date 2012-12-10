@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <dsmcc/dsmcc-tsparser.h>
 #include "dsmcc.h"
 #include "dsmcc-debug.h"
 #include "dsmcc-util.h"

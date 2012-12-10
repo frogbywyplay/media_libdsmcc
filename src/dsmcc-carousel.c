@@ -26,10 +26,11 @@ struct dsmcc_object_carousel *dsmcc_object_carousel_find_by_cid(struct dsmcc_sta
 	return NULL;
 }
 
-int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg)
+int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
 {
 	struct dsmcc_object_carousel *car = NULL;
 	struct dsmcc_stream *stream;
+	uint8_t pattern[3], equal[3], notequal[3];
 
 	/* Check if carousel is already requested */
 	car = find_carousel_by_request(state, pid, transaction_id);
@@ -59,11 +60,15 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 	if (downloadpath[strlen(downloadpath) - 1] == '/')
 		car->downloadpath[strlen(downloadpath) - 1] = '\0';
 
-	car->cache_callback = cache_callback;
-	car->cache_callback_arg = cache_callback_arg;
+	memcpy(&car->callbacks, callbacks, sizeof(struct dsmcc_carousel_callbacks));
 	car->requested_pid = pid;
 	car->requested_transaction_id = transaction_id;
 	dsmcc_stream_queue_add(car, DSMCC_STREAM_SELECTOR_PID, pid, DSMCC_QUEUE_ENTRY_DSI, transaction_id);
+	/* add section filter on stream for DSI (table_id == 0x3B, table_id_extension == 0x0000 or 0x0001) */
+	pattern[0] = 0x3B; equal[0] = 0xff; notequal[0] = 0x00;
+	pattern[1] = 0x00; equal[1] = 0xff; notequal[1] = 0x00;
+	pattern[2] = 0x00; equal[2] = 0xfe; notequal[2] = 0x00;
+	(*state->callbacks.add_section_filter)(state->callbacks.add_section_filter_arg, pid, pattern, equal, notequal, 3);
 
 	return 1;
 }

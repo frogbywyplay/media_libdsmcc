@@ -56,12 +56,31 @@ void dsmcc_set_logger(dsmcc_logger_t *logger, int severity);
  *  \{
  */
 
-/** \brief Callback called when the library needs to subscribe to new streams
-  * \param arg Opaque argument (passed as-is from dsmcc-open argument stream_sub_callback_arg)
-  * \param assoc_tag the Association Tag of the requested stream
-  * \return the PID of the requested stream
-  */
-typedef uint16_t (dsmcc_stream_subscribe_callback_t)(void *arg, uint16_t assoc_tag);
+struct dsmcc_dvb_callbacks
+{
+	/** \brief Callback called when the library needs to find the PID for a given association tag
+	  * \param arg opaque callback argument (passed as-is from field assoc_tag_callback_arg in struct dsmcc_dvb_callbacks)
+	  * \param assoc_tag the Association Tag of the requested stream
+	  * \param pid pointer to variable where the PID of the requested stream will be written
+	  * \return 0 if successful, <0 otherwise
+	  */
+	int (*get_pid_for_assoc_tag)(void *arg, uint16_t assoc_tag, uint16_t *pid);
+	/** argument for get_pid_for_assoc_tag callback */
+	void *get_pid_for_assoc_tag_arg;
+
+	/** \brief Callback called when the library needs to set a section filter on a PID
+	  * \param arg opaque callback argument (passed as-is from field add_section_filter_arg  in struct dsmcc_dvb_callbacks)
+	  * \param pid
+	  * \param pattern
+	  * \param equalmask
+	  * \param notequalmask
+	  * \param depth
+	  * \return 0 if successful, <0 otherwise
+	  */
+	int (*add_section_filter)(void *arg, uint16_t pid, uint8_t *pattern, uint8_t *equalmask, uint8_t *notequalmask, uint16_t depth);
+	/** argument for add_section_filter callback */
+	void *add_section_filter_arg;
+};
 
 /** Opaque type containing the library state */
 struct dsmcc_state;
@@ -69,10 +88,9 @@ struct dsmcc_state;
 /** \brief Initialize the DSM-CC parser
   * \param cachedir the cache directory that will be used. Will be created if not already existent. If NULL, it will default to /tmp/dsmcc-cache-XYZ (where XYZ is the PID of the current process)
   * \param keep_cache if 0 the cache files will be removed at close
-  * \param stream_sub_callback the callback that will be called when the library needs to subscribe to new streams
-  * \param stream_sub_callback_arg this will be passed as-is as first argument to the callback
+  * \param callbacks the callbacks that will be called when the library needs to interract with DVB stack
   */
-struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, dsmcc_stream_subscribe_callback_t *stream_sub_callback, void *stream_sub_callback_arg);
+struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsmcc_dvb_callbacks *callbacks);
 
 /** \brief Parse a MPEG Section
   * \param state the library state
@@ -94,83 +112,51 @@ void dsmcc_close(struct dsmcc_state *state);
  *  \{
  */
 
-/** Constants for the 'type' passed to the cache callback */
-enum
+struct dsmcc_carousel_callbacks
 {
-	/** Directory */
-	DSMCC_CACHE_DIR = 0,
+	/** \brief Callback called for each directory/file in the carousel to determine if it should be saved or not
+	  * \param arg Opaque argument (passed as-is from the dentry_check_arg field of struct dsmcc_carousel_callbacks
+	  * \param cid the carousel ID
+	  * \param dir 0 if the dentry is a file, any other value indicate that the dentry is a directory
+	  * \param path the directory/file path relative to the carousel root
+	  * \param fullpath the directory/file path on disk
+	  * \return return 0 if the directory/file should be skipped or any other value if it should be saved
+	  */
+	bool (*dentry_check)(void *arg, uint32_t cid, bool dir, const char *path, const char *fullpath);
+	/** argument for dentry_check callback */
+	void *dentry_check_arg;
 
-	/** File */
-	DSMCC_CACHE_FILE
+	/** \brief Callback called after each directory/file in the carousel is saved to disk
+	  * \param arg Opaque argument (passed as-is from the dentry_saved_arg field of struct dsmcc_carousel_callbacks
+	  * \param cid the carousel ID
+	  * \param dir 0 if the dentry is a file, any other value indicate that the dentry is a directory
+	  * \param path the directory/file path relative to the carousel root
+	  * \param fullpath the directory/file path on disk
+	  */
+	void (*dentry_saved)(void *arg, uint32_t cid, bool dir, const char *path, const char *fullpath);
+	/** argument for dentry_saved callback */
+	void  *dentry_saved_arg;
+
+	/** \brief Callback called after the carousel is completely downloaded
+	  * \param arg Opaque argument (passed as-is from the carousel_complete_arg field of struct dsmcc_carousel_callbacks
+	  * \param cid the carousel ID
+	  */
+	void (*carousel_complete)(void *arg, uint32_t cid);
+	/** argument for carousel_complete callback */
+	void  *carousel_complete_arg;
 };
-
-/** Constants for the 'reason' passed to the cache callback */
-enum
-{
-	/** Check if file/dir should be created */
-	DSMCC_CACHE_CHECK = 0,
-
-	/** Notification of creation */
-	DSMCC_CACHE_CREATED,
-};
-
-/** \brief Callback called for each directory/file in the carousel
-  * \param arg Opaque argument (passed as-is from the cache_callback_arg argument of dsmcc_add_carousel
-  * \param cid the carousel ID
-  * \param type the object type (file or directory)
-  * \param reason the reason
-  * \param path the directory/file path relative to the carousel root
-  * \param fullpath the directory/file path on disk
-  * \return when reason is DSMCC_CACHE_CHECK, return a boolean whether the directory/file should be created (true) or skipped (false). The return value is not used for other values of reason.
-  */
-typedef int (dsmcc_cache_callback_t)(void *arg, uint32_t cid, int type, int reason, const char *path, const char *fullpath);
 
 /** \brief Add a carousel to the list of carousels to be parsed
   * \param state the library state
   * \param pid the PID of the stream where the carousel DSI message will be broadcasted
   * \param transaction_id the transaction ID of the carousel DSI message or 0 to use the first DSI message found on the stream
   * \param downloadpath the directory where the carousel files will be downloaded
-  * \param cache_callback the callback that will be called before/after each directory or file creation
-  * \param cache_callback_arg this will be passed as-is as first argument to the callback
+  * \param callbacks the callback that will be called during/after carousel download
   * \return 1 if no error occured, 0 otherwise
   */
-int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, dsmcc_cache_callback_t *cache_callback, void *cache_callback_arg);
+int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
 
 /** \} */ // end of 'control' group
-
-/** \defgroup tsparser TS Parser
- *  \{
- */
-
-/** Opaque structure used by the TS Parser */
-struct dsmcc_tsparser_buffer;
-
-/** \brief Allocate a buffer for a PID in the list of section buffers used by the TS Parser
-  * \param buffers a pointer to the list of buffers
-  * \param pid the PID
-  */
-void dsmcc_tsparser_add_pid(struct dsmcc_tsparser_buffer **buffers, uint16_t pid);
-
-/** \brief Free all the buffers used by the TS Parser
-  * \param buffers a pointer to the list of buffers
-  */
-void dsmcc_tsparser_free_buffers(struct dsmcc_tsparser_buffer **buffers);
-
-/** \brief Parse a single TS packet. It will be added to current sections buffers and in case of complete section, dsmcc_parse_section will be called.
-  * \param state the library state
-  * \param buffers a pointer to the list of buffers
-  * \param packet the packet data
-  * \param packet_length the packet length (should be 188)
-  */
-void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparser_buffer **buffers, uint8_t *packet, int packet_length);
-
-/** \brief Call dsmcc_parse_section on all current section buffers.
-  * \param state the library state
-  * \param buffers a pointer to the list of buffers
-  */
-void dsmcc_tsparser_parse_buffered_sections(struct dsmcc_state *state, struct dsmcc_tsparser_buffer *buffers);
-
-/** \} */ // end of 'tsparser' group
 
 #ifdef __cplusplus
 }

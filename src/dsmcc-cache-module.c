@@ -451,7 +451,24 @@ void dsmcc_cache_update_carousel_completion(struct dsmcc_object_carousel *carous
 			return;
 
 	DSMCC_DEBUG("Carousel 0x%08x is complete.", carousel->cid);
+	if (!carousel->complete && carousel->callbacks.carousel_complete)
+		(*carousel->callbacks.carousel_complete)(carousel->callbacks.carousel_complete_arg, carousel->cid);
 	carousel->complete = 1;
+}
+
+static const char *get_module_state_str(int state)
+{
+	switch (state)
+	{
+		case DSMCC_MODULE_STATE_PARTIAL:
+			return "DSMCC_MODULE_STATE_PARTIAL";
+		case DSMCC_MODULE_STATE_COMPLETE:
+			return "DSMCC_MODULE_STATE_COMPLETE";
+		case DSMCC_MODULE_STATE_INVALID:
+			return "DSMCC_MODULE_STATE_INVALID";
+		default:
+			return "UNKNOWN";
+	}
 }
 
 void dsmcc_cache_save_module_data(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *module_id, uint16_t block_number, uint8_t *data, int length)
@@ -521,7 +538,7 @@ void dsmcc_cache_save_module_data(struct dsmcc_object_carousel *carousel, struct
 	}
 	else
 	{
-		DSMCC_DEBUG("Skipping data block for module 0x%04hx (module already downloaded or invalid)", module->id.module_id);
+		DSMCC_DEBUG("Skipping data block for module 0x%04hx (%s)", module->id.module_id, get_module_state_str(module->state));
 	}
 }
 

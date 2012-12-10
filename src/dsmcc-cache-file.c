@@ -234,7 +234,7 @@ static void link_file(struct dsmcc_object_carousel *carousel, struct dsmcc_cache
 	fn = malloc(strlen(carousel->downloadpath) + strlen(file->path) + 2);
 	sprintf(fn, "%s%s%s", carousel->downloadpath, file->path[0] == '/' ? "" : "/", file->path);
 
-	if (carousel->cache_callback && !(*carousel->cache_callback)(carousel->cache_callback_arg, carousel->cid, DSMCC_CACHE_FILE, DSMCC_CACHE_CHECK, file->path, NULL))
+	if (carousel->callbacks.dentry_check && !(*carousel->callbacks.dentry_check)(carousel->callbacks.dentry_check_arg, carousel->cid, 0, file->path, fn))
 	{
 		DSMCC_DEBUG("Skipping file %s as requested", file->path);
 		goto cleanup;
@@ -245,8 +245,8 @@ static void link_file(struct dsmcc_object_carousel *carousel, struct dsmcc_cache
 	{
 		file->written = 1;
 
-		if (carousel->cache_callback)
-			(*carousel->cache_callback)(carousel->cache_callback_arg, carousel->cid, DSMCC_CACHE_FILE, DSMCC_CACHE_CREATED, file->path, fn);
+		if (carousel->callbacks.dentry_saved)
+			(*carousel->callbacks.dentry_saved)(carousel->callbacks.dentry_saved_arg, carousel->cid, 0, file->path, fn);
 	}
 
 cleanup:
@@ -282,9 +282,9 @@ static void write_dir(struct dsmcc_object_carousel *carousel, struct dsmcc_cache
 	}
 
 	/* call callback (except for gateway) */
-	if (!gateway && carousel->cache_callback)
+	if (!gateway && carousel->callbacks.dentry_check)
 	{
-		if (!(*carousel->cache_callback)(carousel->cache_callback_arg, carousel->cid, DSMCC_CACHE_DIR, DSMCC_CACHE_CHECK, dir->path, NULL))
+		if (!(*carousel->callbacks.dentry_check)(carousel->callbacks.dentry_check_arg, carousel->cid, 1, dir->path, dn))
 		{
 			DSMCC_DEBUG("Skipping directory %s as requested", dir->path);
 			goto end;
@@ -296,8 +296,8 @@ static void write_dir(struct dsmcc_object_carousel *carousel, struct dsmcc_cache
 	dir->written = 1;
 
 	/* register and call callback (except for gateway) */
-	if (!gateway && carousel->cache_callback)
-		(*carousel->cache_callback)(carousel->cache_callback_arg, carousel->cid, DSMCC_CACHE_DIR, DSMCC_CACHE_CREATED, dir->path, dn);
+	if (!gateway && carousel->callbacks.dentry_saved)
+		(*carousel->callbacks.dentry_saved)(carousel->callbacks.dentry_saved_arg, carousel->cid, 1, dir->path, dn);
 
 	/* Write out files that had arrived before directory */
 	for (file = dir->files; file; file = file->next)

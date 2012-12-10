@@ -202,6 +202,8 @@ static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *da
         int off = 0, ret;
 	uint16_t i, dsi_data_length;
 	struct biop_ior gateway_ior;
+	uint8_t pattern[3], equal[3], notequal[3];
+	struct dsmcc_stream *stream;
 
 	/* skip unused Server ID */
 	/* 0-19 Server id = 20 * 0xFF */
@@ -247,9 +249,14 @@ static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *da
 	}
 
 	/* Queue entry for DII */
-	dsmcc_stream_queue_add(carousel,
+	stream = dsmcc_stream_queue_add(carousel,
 			DSMCC_STREAM_SELECTOR_ASSOC_TAG, gateway_ior.profile_body.conn_binder.assoc_tag,
 			DSMCC_QUEUE_ENTRY_DII, gateway_ior.profile_body.conn_binder.transaction_id);
+	/* add section filter on stream for DII (table_id == 0x3B, table_id_extension != 0x0000 or 0x0001) */
+	pattern[0] = 0x3B; equal[0] = 0xff; notequal[0] = 0x00;
+	pattern[1] = 0x00; equal[1] = 0x00; notequal[1] = 0xff;
+	pattern[2] = 0x00; equal[2] = 0x00; notequal[2] = 0xfe;
+	(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg, stream->pid, pattern, equal, notequal, 3);
 
 	return off;
 }
@@ -358,12 +365,21 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 	/* add modules info to module cache */
 	for (i = 0; i < number_modules; i++)
 	{
+		uint8_t pattern[4], equal[4], notequal[4];
+		struct dsmcc_stream *stream;
+
 		dsmcc_cache_add_module_info(carousel, &modules_id[i], &modules_info[i]);
 
 		/* Queue entry for DDBs */
-		dsmcc_stream_queue_add(carousel,
+		stream = dsmcc_stream_queue_add(carousel,
 				DSMCC_STREAM_SELECTOR_ASSOC_TAG, assoc_tags[i],
 				DSMCC_QUEUE_ENTRY_DDB, download_id);
+		/* add section filter on stream for DDB (table_id == 0x3C, table_id_extension == module_id, version_number == module_version % 32) */
+		pattern[0] = 0x3C;                                       equal[0] = 0xff;      notequal[0] = 0x00;
+		pattern[1] = (modules_id[i].module_id >> 8) & 0xff;      equal[1] = 0xff;      notequal[1] = 0x00;
+		pattern[2] = modules_id[i].module_id & 0xff;             equal[2] = 0xff;      notequal[2] = 0x00;
+		pattern[3] = (modules_id[i].module_version & 0x1f) << 1; equal[3] = 0x1f << 1; notequal[3] = 0x00; /* bits 2-6 */
+		(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg, stream->pid, pattern, equal, notequal, 4);
 	}
 
 	free(modules_id);

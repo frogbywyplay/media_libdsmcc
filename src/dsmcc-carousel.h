@@ -11,6 +11,8 @@ struct dsmcc_object_carousel
 	char               *downloadpath;
 	bool                complete;
 
+	struct dsmcc_carousel_callbacks callbacks;
+
 	uint16_t requested_pid;
 	uint32_t requested_transaction_id;
 
@@ -19,8 +21,6 @@ struct dsmcc_object_carousel
 
 	struct dsmcc_module     *modules;
 	struct dsmcc_file_cache *filecache;
-	dsmcc_cache_callback_t  *cache_callback;
-	void                    *cache_callback_arg;
 
 	struct dsmcc_object_carousel *next;
 };

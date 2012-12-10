@@ -48,14 +48,13 @@ void dsmcc_state_save(struct dsmcc_state *state)
 	fclose(f);
 }
 
-struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, dsmcc_stream_subscribe_callback_t *stream_sub_callback, void *stream_sub_callback_arg)
+struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsmcc_dvb_callbacks *callbacks)
 {
 	struct dsmcc_state *state = NULL;
 
 	state = calloc(1, sizeof(struct dsmcc_state));
 
-	state->stream_sub_callback = stream_sub_callback;
-	state->stream_sub_callback_arg = stream_sub_callback_arg;
+	memcpy(&state->callbacks, callbacks, sizeof(struct dsmcc_dvb_callbacks));
 
 	if (cachedir == NULL || strlen(cachedir) == 0)
 	{
@@ -125,6 +124,7 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 {
 	struct dsmcc_stream *str;
 	uint16_t pid;
+	int ret;
 
 	if (stream_selector_type == DSMCC_STREAM_SELECTOR_ASSOC_TAG)
 	{
@@ -132,7 +132,12 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 		if (str)
 			return str;
 
-		pid = (*state->stream_sub_callback)(state->stream_sub_callback_arg, stream_selector);
+		ret = (*state->callbacks.get_pid_for_assoc_tag)(state->callbacks.get_pid_for_assoc_tag_arg, stream_selector, &pid);
+		if (ret != 0)
+		{
+			DSMCC_ERROR("Could not find stream with association tag 0x%04x (callback return value is %d)", stream_selector, ret);
+			return NULL;
+		}
 	}
 	else if (stream_selector_type == DSMCC_STREAM_SELECTOR_PID)
 	{
@@ -161,7 +166,7 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 	return str;
 }
 
-void dsmcc_stream_queue_add(struct dsmcc_object_carousel *carousel, int stream_selector_type, uint16_t stream_selector, int type, uint32_t id)
+struct dsmcc_stream *dsmcc_stream_queue_add(struct dsmcc_object_carousel *carousel, int stream_selector_type, uint16_t stream_selector, int type, uint32_t id)
 {
 	struct dsmcc_stream *str;
 	struct dsmcc_queue_entry *entry;
@@ -170,7 +175,7 @@ void dsmcc_stream_queue_add(struct dsmcc_object_carousel *carousel, int stream_s
 	if (str)
 	{
 		if (dsmcc_stream_queue_find(str, type, id))
-			return;
+			return str;
 
 		entry = calloc(1, sizeof(struct dsmcc_queue_entry));
 		entry->stream = str;
@@ -184,6 +189,8 @@ void dsmcc_stream_queue_add(struct dsmcc_object_carousel *carousel, int stream_s
 			entry->next->prev = entry;
 		str->queue = entry;
 	}
+
+	return str;
 }
 
 struct dsmcc_object_carousel *dsmcc_stream_queue_find(struct dsmcc_stream *stream, int type, uint32_t id)

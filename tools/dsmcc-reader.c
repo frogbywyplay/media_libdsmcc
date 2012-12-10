@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #include <dsmcc/dsmcc.h>
+#include <dsmcc/dsmcc-tsparser.h>
 
 static int running = 1;
 
@@ -39,56 +40,59 @@ static void logger(int severity, const char *message)
 	fprintf(stderr, "[dsmcc]%s %s\n", sev, message);
 }
 
-static uint16_t stream_sub_callback(void *arg, uint16_t assoc_tag)
+static int get_pid_for_assoc_tag(void *arg, uint16_t assoc_tag, uint16_t *pid)
 {
-	/* TODO find PID from assoc_tag using PMT and SDT */
-	(void) assoc_tag;
-	return *((uint16_t *)arg);
-#if 0
-	struct dsmcc_tsparser_buffer **buffers = (struct dsmcc_tsparser_buffer **)arg;
+	/* fake, should find PID from assoc_tag using PMT */
+	fprintf(stderr, "[main] Callback: Getting PID for association tag 0x%04x\n", assoc_tag);
+	*pid = *((uint16_t *)arg);
 
-	int pid = pid_from_assoc_tag(assoc_tag);
-
-	dsmcc_tsparser_add_pid(buffers, pid);
-#endif
+	return 0;
 }
 
-static int cache_callback(void *arg, uint32_t cid, int type, int reason, const char *path, const char *fullpath)
+static int add_section_filter(void *arg, uint16_t pid, uint8_t *pattern, uint8_t *equalmask, uint8_t *notequalmask, uint16_t depth)
 {
-	char *t, *r;
+	char *p, *em, *nem;
+	int i;
 
 	(void) arg;
-	(void) fullpath;
-
-	switch (type)
+	p = malloc(depth * 2 + 1);
+	em = malloc(depth * 2 + 1);
+	nem = malloc(depth * 2 + 1);
+	for (i = 0;i < depth; i++)
 	{
-		case DSMCC_CACHE_DIR:
-			t = "directory";
-			break;
-		case DSMCC_CACHE_FILE:
-			t = "file";
-			break;
-		default:
-			t = "?";
-			break;
+		sprintf(p + i * 2, "%02hhx", pattern[i]);
+		sprintf(em + i * 2, "%02hhx", equalmask[i]);
+		sprintf(nem + i * 2, "%02hhx", notequalmask[i]);
 	}
+	fprintf(stderr, "[main] Callback: Add section filter on PID 0x%04x: %s|%s|%s\n", pid, p, em, nem);
+	free(nem);
+	free(em);
+	free(p);
 
-	switch (reason)
-	{
-		case DSMCC_CACHE_CHECK:
-			r = "check";
-			break;
-		case DSMCC_CACHE_CREATED:
-			r = "created";
-			break;
-		default:
-			r = "?";
-			break;
-	}
+	return 0;
+}
 
-	fprintf(stderr, "[main] Cache callback for %d:%s (%s %s)\n", cid, path, t, r);
+static bool dentry_check(void *arg, uint32_t cid, bool dir, const char *path, const char *fullpath)
+{
+	(void) arg;
+
+	fprintf(stderr, "[main] Callback: Dentry check 0x%08x:%s:%s -> %s\n", cid, dir ? "directory" : "file", path, fullpath);
 
 	return 1;
+}
+
+static void dentry_saved(void *arg, uint32_t cid, bool dir, const char *path, const char *fullpath)
+{
+	(void) arg;
+	
+	fprintf(stderr, "[main] Callback: Dentry saved 0x%08x:%s:%s -> %s\n", cid, dir ? "directory" : "file", path, fullpath);
+};
+
+static void carousel_complete(void *arg, uint32_t cid)
+{
+	(void) arg;
+
+	fprintf(stderr, "[main] Callback: Carousel complete 0x%08x\n", cid);
 };
 
 static int parse_stream(FILE *ts, struct dsmcc_state *state, struct dsmcc_tsparser_buffer **buffers)
@@ -131,6 +135,8 @@ int main(int argc, char **argv)
 	FILE *ts;
 	uint16_t pid;
 	struct dsmcc_tsparser_buffer *buffers = NULL;
+	struct dsmcc_dvb_callbacks dvb_callbacks;
+	struct dsmcc_carousel_callbacks car_callbacks;
 
 	if(argc < 4)
 	{
@@ -150,11 +156,17 @@ int main(int argc, char **argv)
 	{
 		dsmcc_set_logger(&logger, DSMCC_LOG_DEBUG);
 
-		state = dsmcc_open("/tmp/dsmcc/cache", 1, stream_sub_callback, &pid /*&buffers*/);
+		dvb_callbacks.get_pid_for_assoc_tag = &get_pid_for_assoc_tag;
+		dvb_callbacks.get_pid_for_assoc_tag_arg = &pid;
+		dvb_callbacks.add_section_filter = &add_section_filter;
+		state = dsmcc_open("/tmp/dsmcc-cache", 1, &dvb_callbacks);
 
 		dsmcc_tsparser_add_pid(&buffers, pid);
 
-		dsmcc_add_carousel(state, pid, 0, downloadpath, cache_callback, NULL);
+		car_callbacks.dentry_check = &dentry_check;
+		car_callbacks.dentry_saved = &dentry_saved;
+		car_callbacks.carousel_complete = &carousel_complete;
+		dsmcc_add_carousel(state, pid, 0, downloadpath, &car_callbacks);
 
 		status = parse_stream(ts, state, &buffers);
 
