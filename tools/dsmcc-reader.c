@@ -151,7 +151,10 @@ int main(int argc, char **argv)
 
 	fprintf(stderr, "start\n");
 
-	ts = fopen(argv[1], "r");
+	if (!strcmp(argv[1], "-"))
+		ts = stdin;
+	else
+		ts = fopen(argv[1], "r");
 	if (ts)
 	{
 		dsmcc_set_logger(&logger, DSMCC_LOG_DEBUG);
@@ -179,7 +182,8 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	fclose(ts);
+	if (ts != stdin)
+		fclose(ts);
 
 	return status;
 }
