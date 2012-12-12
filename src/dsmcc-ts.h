@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define DSMCC_TSPARSER_BUFFER_SIZE (4096 + 188)
+#define DSMCC_TSPARSER_BUFFER_SIZE 8192
 
 struct dsmcc_tsparser_buffer
 {
