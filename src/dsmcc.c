@@ -77,7 +77,7 @@ struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsm
 	return state;
 }
 
-static struct dsmcc_stream *find_stream_by_pid(struct dsmcc_state *state, uint16_t pid)
+struct dsmcc_stream *dsmcc_stream_find_by_pid(struct dsmcc_state *state, uint16_t pid)
 {
 	struct dsmcc_stream *str;
 
@@ -96,13 +96,11 @@ static struct dsmcc_stream *find_stream_by_assoc_tag(struct dsmcc_stream *stream
 	int i;
 
 	for (str = streams; str; str = str->next)
-	{
 		for (i = 0; i < str->assoc_tag_count; i++)
 			if (str->assoc_tags[i] == assoc_tag)
-				break;
-	}
+				return str;
 
-	return str;
+	return NULL;
 }
 
 void dsmcc_stream_add_assoc_tag(struct dsmcc_stream *stream, uint16_t assoc_tag)
@@ -120,7 +118,7 @@ void dsmcc_stream_add_assoc_tag(struct dsmcc_stream *stream, uint16_t assoc_tag)
 	DSMCC_DEBUG("Added assoc_tag 0x%hx to stream with pid 0x%hx", assoc_tag, stream->pid);
 }
 
-struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, bool create_if_missing)
+static struct dsmcc_stream *find_stream(struct dsmcc_state *state, int stream_selector_type, uint16_t stream_selector, uint16_t default_pid, bool create_if_missing)
 {
 	struct dsmcc_stream *str;
 	uint16_t pid;
@@ -132,11 +130,19 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 		if (str)
 			return str;
 
-		ret = (*state->callbacks.get_pid_for_assoc_tag)(state->callbacks.get_pid_for_assoc_tag_arg, stream_selector, &pid);
-		if (ret != 0)
+		if (state->callbacks.get_pid_for_assoc_tag)
 		{
-			DSMCC_ERROR("Could not find stream with association tag 0x%04x (callback return value is %d)", stream_selector, ret);
-			return NULL;
+			ret = (*state->callbacks.get_pid_for_assoc_tag)(state->callbacks.get_pid_for_assoc_tag_arg, stream_selector, &pid);
+			if (ret != 0)
+			{
+				DSMCC_DEBUG("PID/AssocTag Callback returned error %d, using initial carousel PID 0x%04x for assoc tag 0x%04x", ret, default_pid, stream_selector);
+				pid = default_pid;
+			}
+		}
+		else
+		{
+			DSMCC_DEBUG("No PID/AssocTag callback, using initial carousel PID 0x%04x for assoc tag 0x%04x", default_pid, stream_selector);
+			pid = default_pid;
 		}
 	}
 	else if (stream_selector_type == DSMCC_STREAM_SELECTOR_PID)
@@ -149,7 +155,7 @@ struct dsmcc_stream *dsmcc_stream_find(struct dsmcc_state *state, int stream_sel
 		return NULL;
 	}
 
-	str = find_stream_by_pid(state, pid);
+	str = dsmcc_stream_find_by_pid(state, pid);
 	if (!str && create_if_missing)
 	{
 		str = calloc(1, sizeof(struct dsmcc_stream));
@@ -171,7 +177,7 @@ struct dsmcc_stream *dsmcc_stream_queue_add(struct dsmcc_object_carousel *carous
 	struct dsmcc_stream *str;
 	struct dsmcc_queue_entry *entry;
 
-	str = dsmcc_stream_find(carousel->state, stream_selector_type, stream_selector, 1);
+	str = find_stream(carousel->state, stream_selector_type, stream_selector, carousel->requested_pid, 1);
 	if (str)
 	{
 		if (dsmcc_stream_queue_find(str, type, id))

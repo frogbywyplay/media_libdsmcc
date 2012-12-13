@@ -595,7 +595,7 @@ int dsmcc_parse_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, 
 	struct dsmcc_section_header header;
 	struct dsmcc_stream *stream;
 
-	stream = dsmcc_stream_find(state, DSMCC_STREAM_SELECTOR_PID, pid, 0);
+	stream = dsmcc_stream_find_by_pid(state, pid);
 	if (!stream)
 	{
 		DSMCC_WARN("Skipping section for unknown PID 0x%hx", pid);

@@ -36,7 +36,7 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 	car = find_carousel_by_request(state, pid, transaction_id);
 	if (!car)
 	{
-		stream = dsmcc_stream_find(state, DSMCC_STREAM_SELECTOR_PID, pid, 0);
+		stream = dsmcc_stream_find_by_pid(state, pid);
 		if (stream)
 			car = dsmcc_stream_queue_find(stream, DSMCC_QUEUE_ENTRY_DSI, transaction_id);
 	}

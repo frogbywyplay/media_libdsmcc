@@ -44,9 +44,9 @@ static int get_pid_for_assoc_tag(void *arg, uint16_t assoc_tag, uint16_t *pid)
 {
 	/* fake, should find PID from assoc_tag using PMT */
 	fprintf(stderr, "[main] Callback: Getting PID for association tag 0x%04x\n", assoc_tag);
-	*pid = *((uint16_t *)arg);
-
-	return 0;
+	(void) arg;
+	(void) pid;
+	return -1;
 }
 
 static int add_section_filter(void *arg, uint16_t pid, uint8_t *pattern, uint8_t *equalmask, uint8_t *notequalmask, uint16_t depth)
@@ -160,7 +160,6 @@ int main(int argc, char **argv)
 		dsmcc_set_logger(&logger, DSMCC_LOG_DEBUG);
 
 		dvb_callbacks.get_pid_for_assoc_tag = &get_pid_for_assoc_tag;
-		dvb_callbacks.get_pid_for_assoc_tag_arg = &pid;
 		dvb_callbacks.add_section_filter = &add_section_filter;
 		state = dsmcc_open("/tmp/dsmcc-cache", 1, &dvb_callbacks);
 
