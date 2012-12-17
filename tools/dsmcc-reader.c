@@ -5,17 +5,26 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <pthread.h>
+#include <sys/time.h>
 
 #include <dsmcc/dsmcc.h>
 #include <dsmcc/dsmcc-tsparser.h>
 
-static int running = 1;
+static int g_running = 1;
+static int g_complete = 0;
+static pthread_mutex_t g_mutex;
+static pthread_cond_t g_cond;
 
 static void sigint_handler(int signal)
 {
 	(void) signal;
 	fprintf(stderr, "sigint\n");
-	running = 0;
+
+	pthread_mutex_lock(&g_mutex);
+	g_running = 0;
+	pthread_cond_signal(&g_cond);
+	pthread_mutex_unlock(&g_mutex);
 }
 
 static void logger(int severity, const char *message)
@@ -88,11 +97,36 @@ static void dentry_saved(void *arg, uint32_t cid, bool dir, const char *path, co
 	fprintf(stderr, "[main] Callback: Dentry saved 0x%08x:%s:%s -> %s\n", cid, dir ? "directory" : "file", path, fullpath);
 };
 
-static void carousel_complete(void *arg, uint32_t cid)
+static void carousel_status_changed(void *arg, uint32_t cid, int newstatus)
 {
+	const char *status;
+
 	(void) arg;
 
-	fprintf(stderr, "[main] Callback: Carousel complete 0x%08x\n", cid);
+	switch (newstatus)
+	{
+		case DSMCC_STATUS_DOWNLOADING:
+			status = "DOWNLOADING";
+			break;
+		case DSMCC_STATUS_TIMEDOUT:
+			status = "TIMED-OUT";
+			break;
+		case DSMCC_STATUS_DONE:
+			status = "DONE";
+			break;
+		default:
+			status = "Unknown!";
+			break;
+	}
+	fprintf(stderr, "[main] Callback: Carousel 0x%08x status changed to %s\n", cid, status);
+
+	if (newstatus == DSMCC_STATUS_TIMEDOUT || newstatus == DSMCC_STATUS_DONE)
+	{
+		pthread_mutex_lock(&g_mutex);
+		g_complete = 1;
+		pthread_cond_signal(&g_cond);
+		pthread_mutex_unlock(&g_mutex);
+	}
 };
 
 static int parse_stream(FILE *ts, struct dsmcc_state *state, struct dsmcc_tsparser_buffer **buffers)
@@ -102,7 +136,7 @@ static int parse_stream(FILE *ts, struct dsmcc_state *state, struct dsmcc_tspars
 	int rc;
 	int i = 0;
 
-	while(running)
+	while (g_running && !g_complete)
 	{
 		rc = fread(buf, 1, 188, ts);
 		if (rc < 0)
@@ -157,6 +191,9 @@ int main(int argc, char **argv)
 		ts = fopen(argv[1], "r");
 	if (ts)
 	{
+		pthread_mutex_init(&g_mutex, NULL);
+		pthread_cond_init(&g_cond, NULL);
+
 		dsmcc_set_logger(&logger, DSMCC_LOG_DEBUG);
 
 		dvb_callbacks.get_pid_for_assoc_tag = &get_pid_for_assoc_tag;
@@ -167,10 +204,24 @@ int main(int argc, char **argv)
 
 		car_callbacks.dentry_check = &dentry_check;
 		car_callbacks.dentry_saved = &dentry_saved;
-		car_callbacks.carousel_complete = &carousel_complete;
+		car_callbacks.carousel_status_changed = &carousel_status_changed;
 		dsmcc_add_carousel(state, pid, 0, downloadpath, &car_callbacks);
 
 		status = parse_stream(ts, state, &buffers);
+
+		pthread_mutex_lock(&g_mutex);
+		if (!g_complete)
+		{
+			struct timeval now;
+			struct timespec ts;
+			fprintf(stderr, "Waiting 10s for carousel completion...\n");
+			gettimeofday(&now, NULL);
+			ts.tv_sec = now.tv_sec + 10;
+			ts.tv_nsec = now.tv_usec * 1000;
+			if (pthread_cond_timedwait(&g_cond, &g_mutex, &ts) == ETIMEDOUT)
+				fprintf(stderr, "Time out!\n");
+		}
+		pthread_mutex_unlock(&g_mutex);
 
 		dsmcc_close(state);
 		dsmcc_tsparser_free_buffers(&buffers);

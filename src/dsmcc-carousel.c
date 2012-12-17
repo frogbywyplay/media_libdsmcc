@@ -6,6 +6,9 @@
 #include "dsmcc-cache-module.h"
 #include "dsmcc-cache-file.h"
 
+/* timeout for aquisition of DSI message in microseconds */
+#define DEFAULT_DSI_TIMEOUT (10 * 1000000)
+
 static struct dsmcc_object_carousel *find_carousel_by_request(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id)
 {
 	struct dsmcc_object_carousel *carousel;
@@ -54,7 +57,6 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 		state->carousels = car;
 	}
 
-	car->complete = 0;
 	car->downloadpath = strdup(downloadpath);
 	if (downloadpath[strlen(downloadpath) - 1] == '/')
 		car->downloadpath[strlen(downloadpath) - 1] = '\0';
@@ -72,7 +74,38 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 		(*state->callbacks.add_section_filter)(state->callbacks.add_section_filter_arg, pid, pattern, equal, notequal, 3);
 	}
 
+	dsmcc_timeout_set(car, DSMCC_TIMEOUT_DSI, 0, DEFAULT_DSI_TIMEOUT);
+
+	car->status = -1;
+	dsmcc_object_carousel_set_status(car, DSMCC_STATUS_DOWNLOADING);
+
 	return 1;
+}
+
+static const char *status_str(int status)
+{
+	switch (status)
+	{
+		case DSMCC_STATUS_DOWNLOADING:
+			return "DOWNLOADING";
+		case DSMCC_STATUS_TIMEDOUT:
+			return "TIMED-OUT";
+		case DSMCC_STATUS_DONE:
+			return "DONE";
+		default:
+			return "Unknown!";
+	}
+}
+
+void dsmcc_object_carousel_set_status(struct dsmcc_object_carousel *carousel, int newstatus)
+{
+	if (newstatus == carousel->status)
+		return;
+
+	DSMCC_DEBUG("Carousel 0x%08x status changed to %s", carousel->cid, status_str(newstatus));
+	carousel->status = newstatus;
+	if (carousel->callbacks.carousel_status_changed)
+		(*carousel->callbacks.carousel_status_changed)(carousel->callbacks.carousel_status_changed_arg, carousel->cid, carousel->status);
 }
 
 static void free_carousel(struct dsmcc_object_carousel *car, bool keep_cache)
@@ -127,7 +160,7 @@ bool dsmcc_object_carousel_load_all(FILE *f, struct dsmcc_state *state)
 		carousel->downloadpath = malloc(tmp);
 		if (!fread(carousel->downloadpath, 1, tmp, f))
 			goto error;
-		if (!fread(&carousel->complete, 1, sizeof(bool), f))
+		if (!fread(&carousel->status, 1, sizeof(int), f))
 			goto error;
 		if (!fread(&carousel->requested_pid, 1, sizeof(uint16_t), f))
 			goto error;
@@ -167,7 +200,7 @@ void dsmcc_object_carousel_save_all(FILE *f, struct dsmcc_state *state)
 		tmp = strlen(carousel->downloadpath) + 1;
 		fwrite(&tmp, 1, sizeof(uint32_t), f);
 		fwrite(carousel->downloadpath, 1, tmp, f);
-		fwrite(&carousel->complete, 1, sizeof(bool), f);
+		fwrite(&carousel->status, 1, sizeof(int), f);
 		fwrite(&carousel->requested_pid, 1, sizeof(uint16_t), f);
 		fwrite(&carousel->requested_transaction_id, 1, sizeof(uint32_t), f);
 

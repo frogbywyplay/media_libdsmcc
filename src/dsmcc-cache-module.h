@@ -16,6 +16,9 @@ struct dsmcc_module_info
 	bool     compressed;
 	uint8_t  compress_method;
 	uint32_t uncompressed_size;
+
+	uint32_t mod_timeout;
+	uint32_t block_timeout;
 };
 
 struct dsmcc_module;

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "dsmcc-debug.h"
 
@@ -26,7 +27,7 @@ void dsmcc_log(int severity, const char *filename, const char *function, int lin
 	if (!g_logger || g_severity > severity)
 		return;
 
-	i = snprintf(buffer, 1024, "%s:%d %s ", filename, lineno, function);
+	i = snprintf(buffer, 1024, "%08lx:%s:%d %s ", pthread_self(), filename, lineno, function);
 	va_list va;
 	va_start(va, format);
 	vsnprintf(buffer + i, 1024 - i, format, va);

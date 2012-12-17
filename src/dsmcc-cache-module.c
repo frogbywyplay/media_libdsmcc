@@ -55,6 +55,8 @@ struct dsmcc_module_partial
 	uint32_t downloaded_block_count;
 	uint32_t blockmap_size;
 	uint8_t *blockmap;
+
+	uint32_t block_timeout;
 };
 
 /* data for completed module */
@@ -321,6 +323,10 @@ static void process_module(struct dsmcc_object_carousel *carousel, struct dsmcc_
 	module->state = DSMCC_MODULE_STATE_COMPLETE;
 	memset(&module->data.complete, 0, sizeof(struct dsmcc_module_complete));
 
+	/* remove module timeouts */
+	dsmcc_timeout_remove(carousel, DSMCC_TIMEOUT_MODULE, module->id.module_id);
+	dsmcc_timeout_remove(carousel, DSMCC_TIMEOUT_NEXTBLOCK, module->id.module_id);
+
 	msg = messages;
 	while (msg)
 	{
@@ -421,6 +427,7 @@ void dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct 
 	memcpy(&module->id, module_id, sizeof(struct dsmcc_module_id));
 	memset(&module->data.partial, 0, sizeof(struct dsmcc_module_partial));
 	module->data.partial.module_size = module_info->module_size;
+	module->data.partial.block_timeout = module_info->block_timeout;
 	module->data.partial.compressed = module_info->compressed;
 	module->data.partial.compress_method = module_info->compress_method;
 	module->data.partial.uncompressed_size = module_info->uncompressed_size;
@@ -446,14 +453,14 @@ void dsmcc_cache_update_carousel_completion(struct dsmcc_object_carousel *carous
 {
 	struct dsmcc_module *module;
 
+	if (carousel->status == DSMCC_STATUS_DONE)
+		return;
+
 	for (module = carousel->modules; module; module = module->next)
 		if (module->state != DSMCC_MODULE_STATE_COMPLETE || !module->data.complete.files_cached)
 			return;
 
-	DSMCC_DEBUG("Carousel 0x%08x is complete.", carousel->cid);
-	if (!carousel->complete && carousel->callbacks.carousel_complete)
-		(*carousel->callbacks.carousel_complete)(carousel->callbacks.carousel_complete_arg, carousel->cid);
-	carousel->complete = 1;
+	dsmcc_object_carousel_set_status(carousel, DSMCC_STATUS_DONE);
 }
 
 static const char *get_module_state_str(int state)
@@ -524,6 +531,8 @@ void dsmcc_cache_save_module_data(struct dsmcc_object_carousel *carousel, struct
 			}
 			module->data.partial.downloaded_block_count++;
 			module->data.partial.blockmap[block_number >> 3] |= (1 << (block_number & 7));
+
+			dsmcc_timeout_set(carousel, DSMCC_TIMEOUT_NEXTBLOCK, module->id.module_id, module->data.partial.block_timeout);
 		}
 
 		DSMCC_DEBUG("Module 0x%04hx Downloaded blocks %d/%d", module->id.module_id, module->data.partial.downloaded_block_count, module->data.partial.block_count);

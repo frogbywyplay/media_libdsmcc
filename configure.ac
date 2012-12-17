@@ -13,6 +13,7 @@ AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
 
 # Checks for libraries.
+AC_CHECK_LIB([pthread], [pthread_create], [], [ AC_MSG_ERROR([Could not find pthread library]) ] )
 
 # Checks for header files.
 AC_CHECK_HEADERS([stdbool.h])

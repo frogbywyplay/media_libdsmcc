@@ -9,7 +9,7 @@ struct dsmcc_object_carousel
 	struct dsmcc_state *state;
 	uint32_t            cid;
 	char               *downloadpath;
-	bool                complete;
+	int                 status;
 
 	struct dsmcc_carousel_callbacks callbacks;
 
@@ -29,5 +29,6 @@ struct dsmcc_object_carousel *dsmcc_object_carousel_find_by_cid(struct dsmcc_sta
 bool dsmcc_object_carousel_load_all(FILE *file, struct dsmcc_state *state);
 void dsmcc_object_carousel_save_all(FILE *file, struct dsmcc_state *state);
 void dsmcc_object_carousel_free_all(struct dsmcc_state *state, bool keep_cache);
+void dsmcc_object_carousel_set_status(struct dsmcc_object_carousel *carousel, int newstatus);
 
 #endif

@@ -92,14 +92,14 @@ struct dsmcc_state;
   */
 struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsmcc_dvb_callbacks *callbacks);
 
-/** \brief Parse a MPEG Section
+/** \brief Add a MPEG section that will be processed by the parsing thread
   * \param state the library state
   * \param pid the PID of the stream from which the section originates
   * \param data the section data
   * \param data_length the total length of the data buffer
   * \return 1 if no error occured, 0 otherwise
   */
-int dsmcc_parse_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, int data_length);
+void dsmcc_add_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, int data_length);
 
 /** \brief Free the memory used by the library (and the cache files if keep_state was 0 on dsmcc_init call)
   * \param state the library state
@@ -111,6 +111,13 @@ void dsmcc_close(struct dsmcc_state *state);
 /** \defgroup control Download Control
  *  \{
  */
+
+enum
+{
+	DSMCC_STATUS_DOWNLOADING,
+	DSMCC_STATUS_TIMEDOUT,
+	DSMCC_STATUS_DONE
+};
 
 struct dsmcc_carousel_callbacks
 {
@@ -137,13 +144,14 @@ struct dsmcc_carousel_callbacks
 	/** argument for dentry_saved callback */
 	void  *dentry_saved_arg;
 
-	/** \brief Callback called after the carousel is completely downloaded
-	  * \param arg Opaque argument (passed as-is from the carousel_complete_arg field of struct dsmcc_carousel_callbacks
+	/** \brief Callback called when the carousel status changes
+	  * \param arg Opaque argument (passed as-is from the carousel_status_changed_arg field of struct dsmcc_carousel_callbacks
 	  * \param cid the carousel ID
+	  * \param newstatus the new carousel status
 	  */
-	void (*carousel_complete)(void *arg, uint32_t cid);
-	/** argument for carousel_complete callback */
-	void  *carousel_complete_arg;
+	void (*carousel_status_changed)(void *arg, uint32_t cid, int newstatus);
+	/** argument for carousel_status_changed callback */
+	void  *carousel_status_changed_arg;
 };
 
 /** \brief Add a carousel to the list of carousels to be parsed

@@ -260,6 +260,10 @@ static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *da
 		(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg, stream->pid, pattern, equal, notequal, 3);
 	}
 
+	/* update timeouts */
+	dsmcc_timeout_remove(carousel, DSMCC_TIMEOUT_DSI, 0);
+	dsmcc_timeout_set(carousel, DSMCC_TIMEOUT_DII, 0, gateway_ior.profile_body.conn_binder.timeout);
+
 	return off;
 }
 
@@ -340,6 +344,9 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 		}
 		off += module_info_length;
 
+		modules_info[i].mod_timeout = bmi->mod_timeout;
+		modules_info[i].block_timeout = bmi->block_timeout;
+
 		assoc_tags[i] = bmi->assoc_tag;
 		desc = dsmcc_find_descriptor_by_type(bmi->descriptors, DSMCC_DESCRIPTOR_COMPRESSED);
 		if (desc)
@@ -387,7 +394,13 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 			pattern[3] = (modules_id[i].module_version & 0x1f) << 1;
 			(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg, stream->pid, pattern, equal, notequal, 4);
 		}
+
+		/* add module timeout */
+		dsmcc_timeout_set(carousel, DSMCC_TIMEOUT_MODULE, modules_id[i].module_id, modules_info[i].mod_timeout);
 	}
+
+	/* remove DII timeout */
+	dsmcc_timeout_remove(carousel, DSMCC_TIMEOUT_DII, 0);
 
 	free(modules_id);
 	free(modules_info);
@@ -596,43 +609,43 @@ static int parse_section_data(struct dsmcc_stream *stream, uint8_t *data, int da
 	return off;
 }
 
-int dsmcc_parse_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, int data_length)
+int dsmcc_parse_section(struct dsmcc_state *state, struct dsmcc_section *section)
 {
 	int off = 0, ret;
 	struct dsmcc_section_header header;
 	struct dsmcc_stream *stream;
 
-	stream = dsmcc_stream_find_by_pid(state, pid);
+	stream = dsmcc_stream_find_by_pid(state, section->pid);
 	if (!stream)
 	{
-		DSMCC_WARN("Skipping section for unknown PID 0x%hx", pid);
+		DSMCC_WARN("Skipping section for unknown PID 0x%hx", section->pid);
 		return 0;
 	}
 
-	ret = parse_section_header(&header, data, data_length);
+	ret = parse_section_header(&header, section->data, section->length);
 	if (ret < 0)
 		return 0;
 	off += ret;
 
-	if (header.length > data_length - off)
+	if (header.length > section->length - off)
 	{
-		DSMCC_ERROR("Data buffer overflow (need %hu bytes but only got %d)", header.length, data_length - off);
+		DSMCC_ERROR("Data buffer overflow (need %hu bytes but only got %d)", header.length, section->length - off);
 		return 0;
 	}
 
-	DSMCC_DEBUG("Processing section: PID 0x%hx length %hu", pid, header.length);
+	DSMCC_DEBUG("Processing section: PID 0x%hx length %hu", section->pid, header.length);
 
 	switch (header.table_id)
 	{
 		case 0x3B:
 			DSMCC_DEBUG("DSI/DII Section");
-			ret = parse_section_control(stream, data + off, header.length);
+			ret = parse_section_control(stream, section->data + off, header.length);
 			if (ret < 0)
 				return 0;
 			break;
 		case 0x3C:
 			DSMCC_DEBUG("DDB Section");
-			ret = parse_section_data(stream, data + off, header.length);
+			ret = parse_section_data(stream, section->data + off, header.length);
 			if (ret < 0)
 				return 0;
 			break;

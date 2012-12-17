@@ -1,13 +1,16 @@
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "dsmcc.h"
 #include "dsmcc-util.h"
 #include "dsmcc-carousel.h"
+#include "dsmcc-section.h"
 
 struct dsmcc_queue_entry
 {
@@ -48,6 +51,104 @@ void dsmcc_state_save(struct dsmcc_state *state)
 	fclose(f);
 }
 
+void *dsmcc_thread_func(void *arg)
+{
+	struct dsmcc_state *state = (struct dsmcc_state *) arg;
+
+	while (1)
+	{
+		pthread_mutex_lock(&state->mutex);
+
+		if (!state->stop && !state->first_sect)
+		{
+			/* compute waiting time: next timeout or if none, infinite waiting time */
+			if (state->timeouts)
+			{
+				struct timeval *waketime;
+				struct timespec wakets;
+
+				waketime = &state->timeouts->abstime;
+
+				if (dsmcc_log_enabled(DSMCC_LOG_DEBUG))
+				{
+					struct timeval curtime;
+					struct timeval waittime;
+					gettimeofday(&curtime, NULL);
+					timersub(waketime, &curtime, &waittime);
+					DSMCC_DEBUG("Waiting %d.%06d second(s) for wakeup", waittime.tv_sec, waittime.tv_usec);
+				}
+
+				wakets.tv_sec = waketime->tv_sec;
+				wakets.tv_nsec = waketime->tv_usec * 1000;
+				if (pthread_cond_timedwait(&state->cond, &state->mutex, &wakets) == ETIMEDOUT)
+				{
+					pthread_mutex_lock(&state->mutex);
+				}
+			}
+			else
+			{
+				DSMCC_DEBUG("Wait indefinitely for wakeup");
+				pthread_cond_wait(&state->cond, &state->mutex);
+			}
+		}
+
+		/* stop is requested, quit thread immediately */
+		if (state->stop)
+			break;
+
+		/* parse all buffered sections */
+		while (state->first_sect)
+		{
+			struct dsmcc_section *section = state->first_sect;
+			state->first_sect = state->first_sect->next;
+			if (state->last_sect == section)
+				state->last_sect = NULL;
+			dsmcc_parse_section(state, section);
+			free(section);
+		}
+
+		/* handle expired timeouts */
+		{
+			struct dsmcc_timeout *prevtimeout, *timeout, *nexttimeout;
+
+			DSMCC_DEBUG("Current timeouts:");
+			timeout = state->timeouts;
+			prevtimeout = NULL;
+			while (timeout)
+			{
+				struct timeval curtime;
+
+				gettimeofday(&curtime, NULL);
+
+				if (dsmcc_log_enabled(DSMCC_LOG_DEBUG))
+				{
+					struct timeval waittime;
+					timersub(&timeout->abstime, &curtime, &waittime);
+					DSMCC_DEBUG("CID 0x%08x DELAY %d.%06d TYPE %d MODULE_ID 0x%04hhx", timeout->carousel->cid, waittime.tv_sec, waittime.tv_usec, timeout->type, timeout->module_id);
+				}
+
+				nexttimeout = timeout->next;
+				if (timercmp(&timeout->abstime, &curtime, <))
+				{
+					dsmcc_object_carousel_set_status(timeout->carousel, DSMCC_STATUS_TIMEDOUT);
+
+					/* remove timeout */
+					if (prevtimeout)
+						prevtimeout->next = timeout->next;
+					else
+						state->timeouts = timeout->next;
+					free(timeout);
+				}
+				timeout = nexttimeout;
+			}
+		}
+
+		pthread_mutex_unlock(&state->mutex);
+	}
+
+	pthread_exit(0);
+}
+
 struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsmcc_dvb_callbacks *callbacks)
 {
 	struct dsmcc_state *state = NULL;
@@ -74,7 +175,35 @@ struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsm
 
 	load_state(state);
 
+	pthread_mutex_init(&state->mutex, NULL);
+	pthread_cond_init(&state->cond, NULL);
+	pthread_create(&state->thread, NULL, &dsmcc_thread_func, state);
+
 	return state;
+}
+
+void dsmcc_add_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, int data_length)
+{
+	struct dsmcc_section *sect;
+
+	sect = malloc(sizeof(struct dsmcc_section) + data_length);
+	sect->pid = pid;
+	sect->data = ((uint8_t *) sect) + sizeof(struct dsmcc_section);
+	memcpy(sect->data, data, data_length);
+	sect->length = data_length;
+	sect->next = NULL;
+
+	pthread_mutex_lock(&state->mutex);
+
+	DSMCC_DEBUG("Buffering a section for PID 0x%04x, size %d", pid, data_length);
+	if (state->last_sect)
+		state->last_sect->next = sect;
+	state->last_sect = sect;
+	if (!state->first_sect)
+		state->first_sect = sect;
+
+	pthread_cond_signal(&state->cond);
+	pthread_mutex_unlock(&state->mutex);
 }
 
 struct dsmcc_stream *dsmcc_stream_find_by_pid(struct dsmcc_state *state, uint16_t pid)
@@ -274,8 +403,29 @@ static void free_all_streams(struct dsmcc_state *state)
 
 void dsmcc_close(struct dsmcc_state *state)
 {
+	struct dsmcc_section *nextsect;
+	int count;
+
 	if (!state)
 		return;
+
+	DSMCC_DEBUG("Sending stop signal");
+	pthread_mutex_lock(&state->mutex);
+	state->stop = 1;
+	pthread_cond_signal(&state->cond);
+	pthread_mutex_unlock(&state->mutex);
+	DSMCC_DEBUG("Waiting for thread to terminate");
+	pthread_join(state->thread, NULL);
+
+	count = 0;
+	while (state->first_sect)
+	{
+		nextsect = state->first_sect->next;
+		free(state->first_sect);
+		state->first_sect = nextsect;
+		count++;
+	}
+	DSMCC_DEBUG("Dropped %d section(s) buffered but not parsed", count);
 
 	dsmcc_object_carousel_free_all(state, state->keep_cache);
 	state->carousels = NULL;
@@ -292,4 +442,66 @@ void dsmcc_close(struct dsmcc_state *state)
 	free(state->cachefile);
 	free(state->cachedir);
 	free(state);
+}
+
+void dsmcc_timeout_set(struct dsmcc_object_carousel *carousel, int type, uint16_t module_id, uint32_t delay_us)
+{
+	struct dsmcc_timeout *timeout;
+	struct dsmcc_timeout *current, *next;
+	struct timeval now, delay;
+
+	dsmcc_timeout_remove(carousel, type, module_id);
+
+	if (!delay_us)
+		return;
+
+	DSMCC_DEBUG("Adding timeout for carousel 0x%08x type %d module id 0x%04hhx delay %uus", carousel->cid, type, module_id, delay_us);
+
+	timeout = malloc(sizeof(struct dsmcc_timeout));
+	timeout->carousel = carousel;
+	timeout->type = type;
+	timeout->module_id = module_id;
+
+	gettimeofday(&now, NULL);
+	delay.tv_sec = delay_us / 1000000;
+	delay.tv_usec = delay_us - delay.tv_sec * 1000000;
+	timeradd(&now, &delay, &timeout->abstime);
+
+	current = NULL;
+	next = carousel->state->timeouts;
+	while (next && timercmp(&next->abstime, &timeout->abstime, <))
+	{
+		current = next;
+		next = current->next;
+	}
+	timeout->next = next;
+	if (current)
+		current->next = timeout;
+	else
+		carousel->state->timeouts = timeout;
+}
+
+void dsmcc_timeout_remove(struct dsmcc_object_carousel *carousel, int type, uint16_t module_id)
+{
+	struct dsmcc_timeout *current, *prev;
+
+	current = carousel->state->timeouts;
+	prev = NULL;
+	while (current)
+	{
+		int match = current->carousel == carousel && current->type == type;
+		if (type == DSMCC_TIMEOUT_MODULE || type == DSMCC_TIMEOUT_NEXTBLOCK)
+			match &= current->module_id == module_id;
+		if (match)
+		{
+			if (prev)
+				prev->next = current->next;
+			else
+				carousel->state->timeouts = current->next;
+			free(current);
+			return;
+		}
+		prev = current;
+		current = current->next;
+	}
 }

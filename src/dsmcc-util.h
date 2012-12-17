@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
+#include <sys/time.h>
 
 uint32_t dsmcc_crc32(uint8_t *data, uint32_t len);
 

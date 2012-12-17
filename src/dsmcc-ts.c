@@ -142,7 +142,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 				if (buf->si_seen)
 				{
 					DSMCC_DEBUG("Processing section data: PID 0x%hx, table ID 0x%02hhx, buffer length %d", buf->pid, buf->data[0], buf->in_section);
-					dsmcc_parse_section(state, pid, buf->data, buf->in_section);
+					dsmcc_add_section(state, pid, buf->data, buf->in_section);
 				}
 				else
 				{
@@ -191,7 +191,7 @@ void dsmcc_tsparser_parse_buffered_sections(struct dsmcc_state *state, struct ds
 	while (buffers)
 	{
 		DSMCC_DEBUG("Processing section data PID 0x%hx, buffer length %d", buffers->pid, buffers->in_section);
-		dsmcc_parse_section(state, buffers->pid, buffers->data, buffers->in_section);
+		dsmcc_add_section(state, buffers->pid, buffers->data, buffers->in_section);
 		buffers->si_seen = 0;
 		buffers->in_section = 0;
 		buffers->cont = -1;
