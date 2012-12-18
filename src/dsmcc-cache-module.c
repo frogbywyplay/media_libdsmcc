@@ -200,7 +200,7 @@ static struct dsmcc_module_dentry *add_dentry(struct dsmcc_module_dentry_list *l
 	return dentry;
 }
 
-static void add_dir_dentry(struct dsmcc_module_complete *module_data, struct biop_msg_dir *msg)
+static void add_dir_dentry(struct dsmcc_object_carousel *carousel, struct dsmcc_module_complete *module_data, struct biop_msg_dir *msg)
 {
 	struct dsmcc_module_dentry *dentry;
 	struct biop_msg_dentry *d;
@@ -212,6 +212,15 @@ static void add_dir_dentry(struct dsmcc_module_complete *module_data, struct bio
 	d = msg->first_dentry;
 	while (d)
 	{
+		if (dsmcc_log_enabled(DSMCC_LOG_DEBUG))
+		{
+			struct dsmcc_module *module;
+			for (module = carousel->modules; module; module = module->next)
+				if (module->id.module_id == d->id.module_id)
+					break;
+			if (!module)
+				DSMCC_DEBUG("Directory entry %s points to a non-existing module 0x%04x", d->name, d->id.module_id);
+		}
 		add_dentry(&dentry->dentries, d->dir, &d->id, strdup(d->name));
 		d = d->next;
 	}
@@ -333,7 +342,7 @@ static void process_module(struct dsmcc_object_carousel *carousel, struct dsmcc_
 		switch (msg->type)
 		{
 			case BIOP_MSG_DIR:
-				add_dir_dentry(&module->data.complete, &msg->msg.dir);
+				add_dir_dentry(carousel, &module->data.complete, &msg->msg.dir);
 				break;
 			case BIOP_MSG_FILE:
 				add_file_dentry(&module->data.complete, data_file, &msg->msg.file);
