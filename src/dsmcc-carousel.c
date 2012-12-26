@@ -6,15 +6,15 @@
 #include "dsmcc-cache-module.h"
 #include "dsmcc-cache-file.h"
 
-/* timeout for aquisition of DSI message in microseconds */
-#define DEFAULT_DSI_TIMEOUT (10 * 1000000)
+/* default timeout for aquisition of DSI message in microseconds (30s) */
+#define DEFAULT_DSI_TIMEOUT (30 * 1000000)
 
-static struct dsmcc_object_carousel *find_carousel_by_request(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id)
+static struct dsmcc_object_carousel *find_carousel_by_requested_pid(struct dsmcc_state *state, uint16_t pid)
 {
 	struct dsmcc_object_carousel *carousel;
 
 	for (carousel = state->carousels; carousel; carousel = carousel->next)
-		if (carousel->requested_pid == pid && (carousel->requested_transaction_id & 0xfffe) == (transaction_id & 0xfffe))
+		if (carousel->requested_pid == pid)
 			return carousel;
 	return NULL;
 }
@@ -29,13 +29,27 @@ struct dsmcc_object_carousel *dsmcc_object_carousel_find_by_cid(struct dsmcc_sta
 	return NULL;
 }
 
-int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
+void dsmcc_remove_carousel(struct dsmcc_state *state, uint16_t pid)
+{
+	struct dsmcc_object_carousel *carousel;
+
+	carousel = find_carousel_by_requested_pid(state, pid);
+	if (carousel)
+	{
+		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DSI);
+		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DII);
+		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
+		dsmcc_timeout_remove_all(carousel);
+	}
+}
+
+void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
 {
 	struct dsmcc_object_carousel *car = NULL;
 	struct dsmcc_stream *stream;
 
 	/* Check if carousel is already requested */
-	car = find_carousel_by_request(state, pid, transaction_id);
+	car = find_carousel_by_requested_pid(state, pid);
 	if (!car)
 	{
 		stream = dsmcc_stream_find_by_pid(state, pid);
@@ -78,8 +92,6 @@ int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transac
 
 	car->status = -1;
 	dsmcc_object_carousel_set_status(car, DSMCC_STATUS_DOWNLOADING);
-
-	return 1;
 }
 
 static const char *status_str(int status)

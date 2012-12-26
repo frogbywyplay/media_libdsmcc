@@ -156,13 +156,18 @@ struct dsmcc_carousel_callbacks
 
 /** \brief Add a carousel to the list of carousels to be parsed
   * \param state the library state
-  * \param pid the PID of the stream where the carousel DSI message will be broadcasted
-  * \param transaction_id the transaction ID of the carousel DSI message or 0 to use the first DSI message found on the stream
+  * \param pid the PID of the stream where the carousel DSI message is broadcasted
+  * \param transaction_id the transaction ID of the carousel DSI message or 0xFFFFFFFF to use the first DSI message found on the stream
   * \param downloadpath the directory where the carousel files will be downloaded
   * \param callbacks the callback that will be called during/after carousel download
-  * \return 1 if no error occured, 0 otherwise
   */
-int dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
+void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
+
+/** \brief Remove a carousel from the list of carousels to be parsed
+  * \param state the library state
+  * \param pid the PID of the stream where the carousel DSI message is broadcasted
+  */
+void dsmcc_remove_carousel(struct dsmcc_state *state, uint16_t pid);
 
 /** \} */ // end of 'control' group
 

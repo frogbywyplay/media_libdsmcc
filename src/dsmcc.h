@@ -81,5 +81,6 @@ void dsmcc_stream_queue_remove(struct dsmcc_object_carousel *carousel, int type)
 
 void dsmcc_timeout_set(struct dsmcc_object_carousel *carousel, int type, uint16_t module_id, uint32_t delay_us);
 void dsmcc_timeout_remove(struct dsmcc_object_carousel *carousel, int type, uint16_t module_id);
+void dsmcc_timeout_remove_all(struct dsmcc_object_carousel *carousel);
 
 #endif

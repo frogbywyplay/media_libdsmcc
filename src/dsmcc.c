@@ -336,7 +336,7 @@ struct dsmcc_object_carousel *dsmcc_stream_queue_find(struct dsmcc_stream *strea
 	{
 		if (entry->type == type)
 		{
-			if (type == DSMCC_QUEUE_ENTRY_DSI && entry->id == 0)
+			if (type == DSMCC_QUEUE_ENTRY_DSI && entry->id == 0xffffffff) /* match all */
 				break;
 			else if ((entry->id & 0xfffe) == (id & 0xfffe)) /* match only bits 1-15 */
 				break;
@@ -503,5 +503,30 @@ void dsmcc_timeout_remove(struct dsmcc_object_carousel *carousel, int type, uint
 		}
 		prev = current;
 		current = current->next;
+	}
+}
+
+void dsmcc_timeout_remove_all(struct dsmcc_object_carousel *carousel)
+{
+	struct dsmcc_timeout *current, *prev, *next;
+
+	current = carousel->state->timeouts;
+	prev = NULL;
+	while (current)
+	{
+		next = current->next;
+		if (current->carousel == carousel)
+		{
+			free(current);
+			if (prev)
+				prev->next = next;
+			else
+				carousel->state->timeouts = next;
+		}
+		else
+		{
+			prev = current;
+		}
+		current = next;
 	}
 }
