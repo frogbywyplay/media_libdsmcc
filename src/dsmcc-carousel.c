@@ -9,6 +9,8 @@
 /* default timeout for aquisition of DSI message in microseconds (30s) */
 #define DEFAULT_DSI_TIMEOUT (30 * 1000000)
 
+#define CAROUSEL_CACHE_FILE_MAGIC 0xDDCC0001
+
 static struct dsmcc_object_carousel *find_carousel_by_requested_pid(struct dsmcc_state *state, uint16_t pid)
 {
 	struct dsmcc_object_carousel *carousel;
@@ -165,6 +167,11 @@ bool dsmcc_object_carousel_load_all(FILE *f, struct dsmcc_state *state)
 	uint32_t tmp;
 	struct dsmcc_object_carousel *carousel = NULL, *lastcar = NULL;
 
+	if (!fread(&tmp, 1, sizeof(uint32_t), f))
+		goto error;
+	if (tmp != CAROUSEL_CACHE_FILE_MAGIC)
+		goto error;
+
 	while (1)
 	{
 		if (!fread(&tmp, 1, sizeof(uint32_t), f))
@@ -210,6 +217,9 @@ void dsmcc_object_carousel_save_all(FILE *f, struct dsmcc_state *state)
 {
 	uint32_t tmp;
 	struct dsmcc_object_carousel *carousel;
+
+	tmp = CAROUSEL_CACHE_FILE_MAGIC;
+	fwrite(&tmp, 1, sizeof(uint32_t), f);
 
 	carousel = state->carousels;
 	while (carousel)
