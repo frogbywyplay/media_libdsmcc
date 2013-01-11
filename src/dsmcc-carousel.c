@@ -116,8 +116,16 @@ void dsmcc_object_carousel_set_status(struct dsmcc_object_carousel *carousel, in
 
 	DSMCC_DEBUG("Carousel 0x%08x status changed to %s", carousel->cid, status_str(newstatus));
 	carousel->status = newstatus;
+
 	if (carousel->callbacks.carousel_status_changed)
 		(*carousel->callbacks.carousel_status_changed)(carousel->callbacks.carousel_status_changed_arg, carousel->cid, carousel->status);
+}
+
+void dsmcc_object_carousel_set_progression(struct dsmcc_object_carousel *carousel, uint32_t downloaded, uint32_t total)
+{
+	DSMCC_DEBUG("Carousel 0x%08x downloaded %u total %u", carousel->cid, downloaded, total);
+	if (carousel->callbacks.download_progression)
+		(*carousel->callbacks.download_progression)(carousel->callbacks.download_progression_arg, carousel->cid, downloaded, total);
 }
 
 static void free_carousel(struct dsmcc_object_carousel *car, bool keep_cache)

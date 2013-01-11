@@ -279,6 +279,7 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 	struct dsmcc_module_id *modules_id;
 	struct dsmcc_module_info *modules_info;
 	uint16_t *assoc_tags;
+	uint32_t total_size;
 
 	if (!dsmcc_getlong(&download_id, data, off, data_length))
 		return -1;
@@ -372,10 +373,12 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 	dsmcc_cache_remove_unneeded_modules(carousel, modules_id, number_modules);
 
 	/* add modules info to module cache */
+	total_size = 0;
 	for (i = 0; i < number_modules; i++)
 	{
 		struct dsmcc_stream *stream;
 
+		total_size += modules_info[i].module_size;
 		dsmcc_cache_add_module_info(carousel, &modules_id[i], &modules_info[i]);
 
 		/* Queue entry for DDBs */

@@ -144,6 +144,16 @@ struct dsmcc_carousel_callbacks
 	/** argument for dentry_saved callback */
 	void  *dentry_saved_arg;
 
+	/** \brief Callback called when the download progression changes
+	  * \param arg Opaque argument (passed as-is from the download_progression_arg field of struct dsmcc_carousel_callbacks
+	  * \param cid the carousel ID
+	  * \param downloaded the amount of bytes downloaded so far
+	  * \param total the total carousel size in bytes
+	  */
+	void (*download_progression)(void *arg, uint32_t cid, uint32_t downloaded, uint32_t total);
+	/** argument for total_carousel_bytes callback */
+	void  *download_progression_arg;
+
 	/** \brief Callback called when the carousel status changes
 	  * \param arg Opaque argument (passed as-is from the carousel_status_changed_arg field of struct dsmcc_carousel_callbacks
 	  * \param cid the carousel ID

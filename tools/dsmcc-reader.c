@@ -93,9 +93,16 @@ static bool dentry_check(void *arg, uint32_t cid, bool dir, const char *path, co
 static void dentry_saved(void *arg, uint32_t cid, bool dir, const char *path, const char *fullpath)
 {
 	(void) arg;
-	
+
 	fprintf(stderr, "[main] Callback: Dentry saved 0x%08x:%s:%s -> %s\n", cid, dir ? "directory" : "file", path, fullpath);
 };
+
+static void download_progression(void *arg, uint32_t cid, uint32_t downloaded, uint32_t total)
+{
+	(void) arg;
+
+	fprintf(stderr, "[main] Callback: Carousel 0x%08x: %u/%u\n", cid, downloaded, total);
+}
 
 static void carousel_status_changed(void *arg, uint32_t cid, int newstatus)
 {
@@ -204,6 +211,7 @@ int main(int argc, char **argv)
 
 		car_callbacks.dentry_check = &dentry_check;
 		car_callbacks.dentry_saved = &dentry_saved;
+		car_callbacks.download_progression = &download_progression;
 		car_callbacks.carousel_status_changed = &carousel_status_changed;
 		dsmcc_add_carousel(state, pid, 0, downloadpath, &car_callbacks);
 
