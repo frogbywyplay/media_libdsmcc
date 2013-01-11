@@ -483,6 +483,7 @@ void dsmcc_cache_update_carousel_completion(struct dsmcc_object_carousel *carous
 		dsmcc_object_carousel_set_status(carousel, DSMCC_STATUS_DONE);
 }
 
+#ifdef DEBUG
 static const char *get_module_state_str(int state)
 {
 	switch (state)
@@ -497,6 +498,7 @@ static const char *get_module_state_str(int state)
 			return "UNKNOWN";
 	}
 }
+#endif
 
 void dsmcc_cache_save_module_data(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *module_id, uint16_t block_number, uint8_t *data, int length)
 {

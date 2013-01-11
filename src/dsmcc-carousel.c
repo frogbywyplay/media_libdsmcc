@@ -96,6 +96,7 @@ void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transa
 	dsmcc_object_carousel_set_status(car, DSMCC_STATUS_DOWNLOADING);
 }
 
+#ifdef DEBUG
 static const char *status_str(int status)
 {
 	switch (status)
@@ -110,6 +111,7 @@ static const char *status_str(int status)
 			return "Unknown!";
 	}
 }
+#endif
 
 void dsmcc_object_carousel_set_status(struct dsmcc_object_carousel *carousel, int newstatus)
 {
