@@ -379,27 +379,28 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 		struct dsmcc_stream *stream;
 
 		total_size += modules_info[i].module_size;
-		dsmcc_cache_add_module_info(carousel, &modules_id[i], &modules_info[i]);
-
-		/* Queue entry for DDBs */
-		stream = dsmcc_stream_queue_add(carousel,
-				DSMCC_STREAM_SELECTOR_ASSOC_TAG, assoc_tags[i],
-				DSMCC_QUEUE_ENTRY_DDB, download_id);
-		/* add section filter on stream for DDB (table_id == 0x3C, table_id_extension == module_id, version_number == module_version % 32) */
-		if (carousel->state->callbacks.add_section_filter)
+		if (!dsmcc_cache_add_module_info(carousel, &modules_id[i], &modules_info[i]))
 		{
-			uint8_t pattern[4];
-			uint8_t equal[4]    = { 0xff, 0xff, 0xff, 0x3e }; /* bits 2-6 */
-			uint8_t notequal[4] = { 0x00, 0x00, 0x00, 0x00 };
-			pattern[0] = 0x3C;
-			pattern[1] = (modules_id[i].module_id >> 8) & 0xff;
-			pattern[2] = modules_id[i].module_id & 0xff;
-			pattern[3] = (modules_id[i].module_version & 0x1f) << 1;
-			(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg, stream->pid, pattern, equal, notequal, 4);
-		}
+			/* Queue entry for DDBs */
+			stream = dsmcc_stream_queue_add(carousel,
+					DSMCC_STREAM_SELECTOR_ASSOC_TAG, assoc_tags[i],
+					DSMCC_QUEUE_ENTRY_DDB, download_id);
+			/* add section filter on stream for DDB (table_id == 0x3C, table_id_extension == module_id, version_number == module_version % 32) */
+			if (carousel->state->callbacks.add_section_filter)
+			{
+				uint8_t pattern[4];
+				uint8_t equal[4]    = { 0xff, 0xff, 0xff, 0x3e }; /* bits 2-6 */
+				uint8_t notequal[4] = { 0x00, 0x00, 0x00, 0x00 };
+				pattern[0] = 0x3C;
+				pattern[1] = (modules_id[i].module_id >> 8) & 0xff;
+				pattern[2] = modules_id[i].module_id & 0xff;
+				pattern[3] = (modules_id[i].module_version & 0x1f) << 1;
+				(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg, stream->pid, pattern, equal, notequal, 4);
+			}
 
-		/* add module timeout */
-		dsmcc_timeout_set(carousel, DSMCC_TIMEOUT_MODULE, modules_id[i].module_id, modules_info[i].mod_timeout);
+			/* add module timeout */
+			dsmcc_timeout_set(carousel, DSMCC_TIMEOUT_MODULE, modules_id[i].module_id, modules_info[i].mod_timeout);
+		}
 	}
 
 	/* remove DII timeout */

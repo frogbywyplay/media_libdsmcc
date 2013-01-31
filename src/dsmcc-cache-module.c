@@ -400,7 +400,7 @@ void dsmcc_cache_remove_unneeded_modules(struct dsmcc_object_carousel *carousel,
 /**
   * Add module to cache list if no module with same id or version has changed
   */
-void dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *module_id, struct dsmcc_module_info *module_info)
+bool dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *module_id, struct dsmcc_module_info *module_info)
 {
 	struct dsmcc_module *module;
 
@@ -415,7 +415,7 @@ void dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct 
 						module_id->module_id, module_id->module_version);
 				update_filecache(carousel, module);
 				dsmcc_cache_update_carousel_completion(carousel);
-				return;
+				return 1;
 			}
 			else
 			{
@@ -456,6 +456,8 @@ void dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct 
 	if (module->next)
 		module->next->prev = module;
 	carousel->modules = module;
+
+	return 0;
 }
 
 void dsmcc_cache_update_carousel_completion(struct dsmcc_object_carousel *carousel)
