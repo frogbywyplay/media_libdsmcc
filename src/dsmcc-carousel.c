@@ -64,6 +64,8 @@ void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transa
 		dsmcc_stream_queue_remove(car, DSMCC_QUEUE_ENTRY_DSI);
 		dsmcc_cache_clear_filecache(car);
 		free(car->downloadpath);
+		car->dsi_transaction_id = 0;
+		car->dii_transaction_id = 0;
 	}
 	else
 	{
