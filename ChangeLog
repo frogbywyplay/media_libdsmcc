@@ -1,0 +1,9 @@
+libdsmcc changelog file.
+Created on 16/01/2013
+
+2.0.1
+- Don't queue DDB for module when it's already completely cached
+- Reset DSI/DII transaction ID when cached carousel is added to queue
+
+2.0.0
+- Initial version
