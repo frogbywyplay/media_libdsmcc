@@ -2,17 +2,6 @@
  * \file	dsmcc.h
  * \brief	DSM-CC Object Carousel parser
  * \author	Loic Lefort <llefort@wyplay.com>
- * \version	2.0.0
- * \note \n
- *
- * Version 0.6 - 19-02-2004
- *                   - Initial version by Richard Palmer <richard@tiro.org.uk>
- *                   - imported from http://libdsmcc.sourceforge.net/
- * 
- * Version 2.0.0 - 05-11-2012
- *                   - Refactored/Cleaned-up version for Wyplay
- *
- * \date	05-11-2012
  */
 
 #ifndef LIBDSMCC_H
