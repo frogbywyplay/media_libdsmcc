@@ -415,7 +415,7 @@ bool dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct 
 						module_id->module_id, module_id->module_version);
 				update_filecache(carousel, module);
 				dsmcc_cache_update_carousel_completion(carousel);
-				return 1;
+				return module->state == DSMCC_MODULE_STATE_COMPLETE;
 			}
 			else
 			{
