@@ -37,7 +37,7 @@ static void load_state(struct dsmcc_state *state)
 	fclose(f);
 }
 
-void dsmcc_state_save(struct dsmcc_state *state)
+static void save_state(struct dsmcc_state *state)
 {
 	FILE *f;
 
@@ -57,9 +57,11 @@ void *dsmcc_thread_func(void *arg)
 
 	while (1)
 	{
+		struct dsmcc_action *buffered_actions;
+
 		pthread_mutex_lock(&state->mutex);
 
-		if (!state->stop && !state->first_sect)
+		if (!state->stop && !state->first_action)
 		{
 			/* compute waiting time: next timeout or if none, infinite waiting time */
 			if (state->timeouts)
@@ -92,22 +94,57 @@ void *dsmcc_thread_func(void *arg)
 			}
 		}
 
+		buffered_actions = state->first_action;
+		state->first_action = state->last_action = NULL;
+
+		pthread_mutex_unlock(&state->mutex);
+
 		/* stop is requested, quit thread immediately */
 		if (state->stop)
 			break;
 
-		/* parse all buffered sections */
-		while (state->first_sect)
+		/* handle all buffered actions */
+		while (buffered_actions && !state->stop)
 		{
-			struct dsmcc_section *section = state->first_sect;
-			state->first_sect = state->first_sect->next;
-			if (state->last_sect == section)
-				state->last_sect = NULL;
-			dsmcc_parse_section(state, section);
-			free(section);
+			struct dsmcc_action *action = buffered_actions;
+			buffered_actions = buffered_actions->next;
+			switch (action->type)
+			{
+				case DSMCC_ACTION_ADD_CAROUSEL:
+					DSMCC_DEBUG("Adding carousel on PID 0x%04x", action->add_carousel.pid);
+					dsmcc_object_carousel_add(state, action->add_carousel.pid, action->add_carousel.transaction_id,
+							action->add_carousel.downloadpath, &action->add_carousel.callbacks);
+					free(action->add_carousel.downloadpath);
+					break;
+				case DSMCC_ACTION_REMOVE_CAROUSEL:
+					DSMCC_DEBUG("Removing carousel on PID 0x%04x", action->add_carousel.pid);
+					dsmcc_object_carousel_remove(state, action->remove_carousel.pid);
+					break;
+				case DSMCC_ACTION_ADD_SECTION:
+					DSMCC_DEBUG("Parsing a section for PID 0x%04x, size %d", action->add_section.section->pid,
+							action->add_section.section->length);
+					dsmcc_parse_section(state, action->add_section.section);
+					free(action->add_section.section);
+					break;
+				default:
+					break;
+			}
+			free(action);
+		}
+		if (buffered_actions)
+		{
+			// put back unprocessed actions
+			struct dsmcc_action *first_action = buffered_actions;
+			while (buffered_actions->next)
+				buffered_actions = buffered_actions->next;
+			pthread_mutex_lock(&state->mutex);
+			buffered_actions->next = state->first_action;
+			state->first_action = first_action;
+			pthread_mutex_unlock(&state->mutex);
 		}
 
 		/* handle expired timeouts */
+		if (!state->stop)
 		{
 			struct dsmcc_timeout *prevtimeout, *timeout, *nexttimeout;
 
@@ -143,7 +180,7 @@ void *dsmcc_thread_func(void *arg)
 			}
 		}
 
-		pthread_mutex_unlock(&state->mutex);
+		save_state(state);
 	}
 
 	pthread_exit(0);
@@ -182,25 +219,15 @@ struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsm
 	return state;
 }
 
-void dsmcc_add_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, int data_length)
+static void buffer_action(struct dsmcc_state *state, struct dsmcc_action *action)
 {
-	struct dsmcc_section *sect;
-
-	sect = malloc(sizeof(struct dsmcc_section) + data_length);
-	sect->pid = pid;
-	sect->data = ((uint8_t *) sect) + sizeof(struct dsmcc_section);
-	memcpy(sect->data, data, data_length);
-	sect->length = data_length;
-	sect->next = NULL;
-
 	pthread_mutex_lock(&state->mutex);
 
-	DSMCC_DEBUG("Buffering a section for PID 0x%04x, size %d", pid, data_length);
-	if (state->last_sect)
-		state->last_sect->next = sect;
-	state->last_sect = sect;
-	if (!state->first_sect)
-		state->first_sect = sect;
+	if (state->last_action)
+		state->last_action->next = action;
+	state->last_action = action;
+	if (!state->first_action)
+		state->first_action = action;
 
 	pthread_cond_signal(&state->cond);
 	pthread_mutex_unlock(&state->mutex);
@@ -403,7 +430,7 @@ static void free_all_streams(struct dsmcc_state *state)
 
 void dsmcc_close(struct dsmcc_state *state)
 {
-	struct dsmcc_section *nextsect;
+	struct dsmcc_action *nextaction;
 	int count;
 
 	if (!state)
@@ -418,14 +445,23 @@ void dsmcc_close(struct dsmcc_state *state)
 	pthread_join(state->thread, NULL);
 
 	count = 0;
-	while (state->first_sect)
+	while (state->first_action)
 	{
-		nextsect = state->first_sect->next;
-		free(state->first_sect);
-		state->first_sect = nextsect;
+		nextaction = state->first_action->next;
+		switch (state->first_action->type)
+		{
+			case DSMCC_ACTION_ADD_CAROUSEL:
+				free(state->first_action->add_carousel.downloadpath);
+				break;
+			case DSMCC_ACTION_ADD_SECTION:
+				free(state->first_action->add_section.section);
+				break;
+		}
+		free(state->first_action);
+		state->first_action = nextaction;
 		count++;
 	}
-	DSMCC_DEBUG("Dropped %d section(s) buffered but not parsed", count);
+	DSMCC_DEBUG("Dropped %d action(s) buffered but not parsed", count);
 
 	dsmcc_object_carousel_free_all(state, state->keep_cache);
 	state->carousels = NULL;
@@ -529,4 +565,42 @@ void dsmcc_timeout_remove_all(struct dsmcc_object_carousel *carousel)
 		}
 		current = next;
 	}
+}
+
+void dsmcc_add_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, int data_length)
+{
+	struct dsmcc_section *sect;
+	struct dsmcc_action *action;
+
+	sect = malloc(sizeof(struct dsmcc_section) + data_length);
+	sect->pid = pid;
+	sect->data = ((uint8_t *) sect) + sizeof(struct dsmcc_section);
+	memcpy(sect->data, data, data_length);
+	sect->length = data_length;
+
+	action = calloc(1, sizeof(struct dsmcc_action));
+	action->type = DSMCC_ACTION_ADD_SECTION;
+	action->add_section.section = sect;
+	buffer_action(state, action);
+}
+
+void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
+{
+	struct dsmcc_action *action;
+	action = calloc(1, sizeof(struct dsmcc_action));
+	action->type = DSMCC_ACTION_ADD_CAROUSEL;
+	action->add_carousel.pid = pid;
+	action->add_carousel.transaction_id = transaction_id;
+	action->add_carousel.downloadpath = strdup(downloadpath);
+	memcpy(&action->add_carousel.callbacks, callbacks, sizeof(struct dsmcc_carousel_callbacks));
+	buffer_action(state, action);
+}
+
+void dsmcc_remove_carousel(struct dsmcc_state *state, uint16_t pid)
+{
+	struct dsmcc_action *action;
+	action = calloc(1, sizeof(struct dsmcc_action));
+	action->type = DSMCC_ACTION_REMOVE_CAROUSEL;
+	action->remove_carousel.pid = pid;
+	buffer_action(state, action);
 }

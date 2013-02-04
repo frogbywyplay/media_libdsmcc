@@ -9,8 +9,6 @@ struct dsmcc_section
 	uint16_t pid;
 	uint8_t *data;
 	int      length;
-
-	struct dsmcc_section *next;
 };
 
 int dsmcc_parse_section(struct dsmcc_state *state, struct dsmcc_section *section);

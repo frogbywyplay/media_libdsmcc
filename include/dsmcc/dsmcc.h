@@ -170,6 +170,23 @@ void dsmcc_remove_carousel(struct dsmcc_state *state, uint16_t pid);
 
 /** \} */ // end of 'control' group
 
+/** \defgroup control Cache Control
+ *  \{
+ */
+
+/** \brief Remove all cached data
+  * \param state the library state
+  */
+void dsmcc_cache_clear(struct dsmcc_state *state);
+
+/** \brief Remove cached data for a given carousel. Does not remove data if carousel is currently queued
+  * \param state the library state
+  * \param carousel_id the carousel_id
+  */
+void dsmcc_cache_clear_carousel(struct dsmcc_state *state, uint32_t carousel_id);
+
+/** \} */ // end of 'cache' group
+
 #ifdef __cplusplus
 }
 #endif

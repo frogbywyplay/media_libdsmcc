@@ -25,7 +25,9 @@ struct dsmcc_object_carousel
 	struct dsmcc_object_carousel *next;
 };
 
-struct dsmcc_object_carousel *dsmcc_object_carousel_find_by_cid(struct dsmcc_state *state, uint32_t cid);
+void dsmcc_object_carousel_add(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id,
+		const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
+void dsmcc_object_carousel_remove(struct dsmcc_state *state, uint16_t pid);
 bool dsmcc_object_carousel_load_all(FILE *file, struct dsmcc_state *state);
 void dsmcc_object_carousel_save_all(FILE *file, struct dsmcc_state *state);
 void dsmcc_object_carousel_free_all(struct dsmcc_state *state, bool keep_cache);

@@ -21,17 +21,7 @@ static struct dsmcc_object_carousel *find_carousel_by_requested_pid(struct dsmcc
 	return NULL;
 }
 
-struct dsmcc_object_carousel *dsmcc_object_carousel_find_by_cid(struct dsmcc_state *state, uint32_t cid)
-{
-	struct dsmcc_object_carousel *carousel;
-
-	for (carousel = state->carousels; carousel; carousel = carousel->next)
-		if (carousel->cid == cid)
-			return carousel;
-	return NULL;
-}
-
-void dsmcc_remove_carousel(struct dsmcc_state *state, uint16_t pid)
+void dsmcc_object_carousel_remove(struct dsmcc_state *state, uint16_t pid)
 {
 	struct dsmcc_object_carousel *carousel;
 
@@ -45,7 +35,7 @@ void dsmcc_remove_carousel(struct dsmcc_state *state, uint16_t pid)
 	}
 }
 
-void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
+void dsmcc_object_carousel_add(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
 {
 	struct dsmcc_object_carousel *car = NULL;
 	struct dsmcc_stream *stream;
@@ -164,6 +154,7 @@ static void free_all_carousels(struct dsmcc_object_carousel *carousels, bool kee
 void dsmcc_object_carousel_free_all(struct dsmcc_state *state, bool keep_cache)
 {
 	free_all_carousels(state->carousels, keep_cache);
+	state->carousels = NULL;
 }
 
 bool dsmcc_object_carousel_load_all(FILE *f, struct dsmcc_state *state)

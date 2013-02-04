@@ -658,6 +658,5 @@ int dsmcc_parse_section(struct dsmcc_state *state, struct dsmcc_section *section
 			return 0;
 	}
 
-	dsmcc_state_save(state);
 	return 1;
 }

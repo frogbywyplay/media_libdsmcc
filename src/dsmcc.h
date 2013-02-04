@@ -51,6 +51,41 @@ struct dsmcc_timeout
 	struct dsmcc_timeout *next;
 };
 
+enum
+{
+	DSMCC_ACTION_ADD_CAROUSEL,
+	DSMCC_ACTION_REMOVE_CAROUSEL,
+	DSMCC_ACTION_ADD_SECTION,
+};
+
+struct dsmcc_action
+{
+	int type;
+
+	union {
+		struct {
+			uint16_t pid;
+			uint32_t transaction_id;
+			char *downloadpath;
+			struct dsmcc_carousel_callbacks callbacks;
+		} add_carousel;
+
+		struct {
+			uint16_t pid;
+		} remove_carousel;
+
+		struct {
+			struct dsmcc_section *section;
+		} add_section;
+
+		struct {
+			uint32_t carousel_id;
+		} cache_clear_carousel;
+	};
+
+	struct dsmcc_action *next;
+};
+
 struct dsmcc_state
 {
 	char *cachedir;   /*< path of the directory where cached files will be stored */
@@ -67,11 +102,9 @@ struct dsmcc_state
 	pthread_cond_t  cond;
 	int             stop;
 
-	struct dsmcc_section *first_sect, *last_sect;
+	struct dsmcc_action *first_action, *last_action;
 	struct dsmcc_timeout *timeouts;
 };
-
-void dsmcc_state_save(struct dsmcc_state *state);
 
 struct dsmcc_stream *dsmcc_stream_find_by_pid(struct dsmcc_state *state, uint16_t pid);
 

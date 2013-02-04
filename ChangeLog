@@ -1,0 +1,16 @@
+libdsmcc changelog file.
+Last Modification Date: 04/02/2013
+
+x.x.x -- xx/xx/xxxx
+- Made all API calls thread-safe (except dsmcc_open / dsmcc_close)
+
+2.0.1 -- 31/01/2013
+- Don't queue DDB for module when it's already completely cached
+- Reset DSI/DII transaction ID when cached carousel is added to queue
+
+2.0.0 -- 05/11/2012
+- Initial refactored / cleaned-up version by Wyplay
+
+0.6 -- 19/02/2004
+- Initial version by Richard Palmer <richard@tiro.org.uk>
+- Imported from http://libdsmcc.sourceforge.net/
