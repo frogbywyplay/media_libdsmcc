@@ -88,10 +88,7 @@ void dsmcc_tsparser_parse_packet(struct dsmcc_state *state, struct dsmcc_tsparse
 			break;
 	}
 	if (buf == NULL)
-	{
-		DSMCC_WARN("Skipping packet: No buffer found for PID 0x%hx", pid);
 		return;
-	}
 
 	/* Test if start on new dsmcc_section */
 	cont = packet[3] & 0x0F;
