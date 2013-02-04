@@ -124,18 +124,18 @@ void dsmcc_object_carousel_set_progression(struct dsmcc_object_carousel *carouse
 		(*carousel->callbacks.download_progression)(carousel->callbacks.download_progression_arg, carousel->cid, downloaded, total);
 }
 
-static void free_carousel(struct dsmcc_object_carousel *car, bool keep_cache)
+void dsmcc_object_carousel_free(struct dsmcc_object_carousel *carousel, bool keep_cache)
 {
 	/* Free modules */
-	dsmcc_cache_free_all_modules(car, keep_cache);
-	car->modules = NULL;
+	dsmcc_cache_free_all_modules(carousel, keep_cache);
+	carousel->modules = NULL;
 
 	/* Free filecache */
-	dsmcc_filecache_free(car, 1);
-	car->filecache = NULL;
+	dsmcc_filecache_free(carousel, 1);
+	carousel->filecache = NULL;
 
-	free(car->downloadpath);
-	free(car);
+	free(carousel->downloadpath);
+	free(carousel);
 }
 
 static void free_all_carousels(struct dsmcc_object_carousel *carousels, bool keep_cache)
@@ -146,7 +146,7 @@ static void free_all_carousels(struct dsmcc_object_carousel *carousels, bool kee
 	while (car)
 	{
 		nextcar = car->next;
-		free_carousel(car, keep_cache);
+		dsmcc_object_carousel_free(car, keep_cache);
 		car = nextcar;
 	}
 }

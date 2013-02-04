@@ -51,6 +51,29 @@ static void save_state(struct dsmcc_state *state)
 	fclose(f);
 }
 
+static void clear_single_carousel(struct dsmcc_state *state, uint32_t carousel_id)
+{
+	struct dsmcc_object_carousel *carousel, **prev;
+
+	carousel = state->carousels;
+	prev = &state->carousels;
+
+	while (carousel)
+	{
+		if (carousel->cid == carousel_id)
+		{
+			(*prev) = carousel->next;
+
+			DSMCC_DEBUG("Freeing cached data for carousel 0x%08x", carousel_id);
+			dsmcc_object_carousel_free(carousel, 0);
+			break;
+		}
+
+		prev = &(carousel->next);
+		carousel = carousel->next;
+	}
+}
+
 void *dsmcc_thread_func(void *arg)
 {
 	struct dsmcc_state *state = (struct dsmcc_state *) arg;
@@ -125,6 +148,14 @@ void *dsmcc_thread_func(void *arg)
 							action->add_section.section->length);
 					dsmcc_parse_section(state, action->add_section.section);
 					free(action->add_section.section);
+					break;
+				case DSMCC_ACTION_CACHE_CLEAR:
+					DSMCC_DEBUG("Clearing all cache");
+					dsmcc_object_carousel_free_all(state, 0);
+					break;
+				case DSMCC_ACTION_CACHE_CLEAR_CAROUSEL:
+					DSMCC_DEBUG("Clearing cache for carousel 0x%08x", action->cache_clear_carousel.carousel_id);
+					clear_single_carousel(state, action->cache_clear_carousel.carousel_id);
 					break;
 				default:
 					break;
@@ -602,5 +633,22 @@ void dsmcc_remove_carousel(struct dsmcc_state *state, uint16_t pid)
 	action = calloc(1, sizeof(struct dsmcc_action));
 	action->type = DSMCC_ACTION_REMOVE_CAROUSEL;
 	action->remove_carousel.pid = pid;
+	buffer_action(state, action);
+}
+
+void dsmcc_cache_clear(struct dsmcc_state *state)
+{
+	struct dsmcc_action *action;
+	action = calloc(1, sizeof(struct dsmcc_action));
+	action->type = DSMCC_ACTION_CACHE_CLEAR;
+	buffer_action(state, action);
+}
+
+void dsmcc_cache_clear_carousel(struct dsmcc_state *state, uint32_t carousel_id)
+{
+	struct dsmcc_action *action;
+	action = calloc(1, sizeof(struct dsmcc_action));
+	action->type = DSMCC_ACTION_CACHE_CLEAR_CAROUSEL;
+	action->cache_clear_carousel.carousel_id = carousel_id;
 	buffer_action(state, action);
 }

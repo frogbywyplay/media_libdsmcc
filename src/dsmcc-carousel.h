@@ -30,6 +30,7 @@ void dsmcc_object_carousel_add(struct dsmcc_state *state, uint16_t pid, uint32_t
 void dsmcc_object_carousel_remove(struct dsmcc_state *state, uint16_t pid);
 bool dsmcc_object_carousel_load_all(FILE *file, struct dsmcc_state *state);
 void dsmcc_object_carousel_save_all(FILE *file, struct dsmcc_state *state);
+void dsmcc_object_carousel_free(struct dsmcc_object_carousel *carousel, bool keep_cache);
 void dsmcc_object_carousel_free_all(struct dsmcc_state *state, bool keep_cache);
 void dsmcc_object_carousel_set_progression(struct dsmcc_object_carousel *carousel, uint32_t downloaded, uint32_t total);
 void dsmcc_object_carousel_set_status(struct dsmcc_object_carousel *carousel, int newstatus);
