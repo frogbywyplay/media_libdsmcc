@@ -471,13 +471,21 @@ void dsmcc_cache_update_carousel_completion(struct dsmcc_object_carousel *carous
 	for (module = carousel->modules; module; module = module->next)
 	{
 		total += module->module_size;
-		if (module->state != DSMCC_MODULE_STATE_COMPLETE || !module->data.complete.files_cached)
+		switch (module->state)
 		{
-			complete = 0;
-			downloaded += module->data.partial.downloaded_bytes;
+			case DSMCC_MODULE_STATE_PARTIAL:
+				downloaded += module->data.partial.downloaded_bytes;
+				complete = 0;
+				break;
+			case DSMCC_MODULE_STATE_COMPLETE:
+				downloaded += module->module_size;
+				if (!module->data.complete.files_cached)
+					complete = 0;
+				break;
+			default:
+				complete = 0;
+				break;
 		}
-		else
-			downloaded += module->module_size;
 	}
 
 	dsmcc_object_carousel_set_progression(carousel, downloaded, total);
