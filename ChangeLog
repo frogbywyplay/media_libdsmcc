@@ -1,7 +1,7 @@
 libdsmcc changelog file.
 Last Modification Date: 05/02/2013
 
-x.x.x -- 05/02/2013
+3.0.0 -- 05/02/2013
 - Made all API calls thread-safe (except dsmcc_open / dsmcc_close)
 - Added API methods dsmcc_cache_clear and dsmcc_cache_clear_carousel
 - Change API calls dsmcc_(add|remove)_carousel to dsmcc_(queue|dequeue)_carousel
