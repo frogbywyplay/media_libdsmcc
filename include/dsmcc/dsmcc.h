@@ -103,6 +103,7 @@ void dsmcc_close(struct dsmcc_state *state);
 
 enum
 {
+	DSMCC_STATUS_PARTIAL,
 	DSMCC_STATUS_DOWNLOADING,
 	DSMCC_STATUS_TIMEDOUT,
 	DSMCC_STATUS_DONE
@@ -112,61 +113,67 @@ struct dsmcc_carousel_callbacks
 {
 	/** \brief Callback called for each directory/file in the carousel to determine if it should be saved or not
 	  * \param arg Opaque argument (passed as-is from the dentry_check_arg field of struct dsmcc_carousel_callbacks
+	  * \param queue_id the queue ID that was returned by dsmcc_queue_carousel
 	  * \param cid the carousel ID
 	  * \param dir 0 if the dentry is a file, any other value indicate that the dentry is a directory
 	  * \param path the directory/file path relative to the carousel root
 	  * \param fullpath the directory/file path on disk
 	  * \return return 0 if the directory/file should be skipped or any other value if it should be saved
 	  */
-	bool (*dentry_check)(void *arg, uint32_t cid, bool dir, const char *path, const char *fullpath);
+	bool (*dentry_check)(void *arg, uint32_t queue_id, uint32_t cid, bool dir, const char *path, const char *fullpath);
 	/** argument for dentry_check callback */
 	void *dentry_check_arg;
 
 	/** \brief Callback called after each directory/file in the carousel is saved to disk
 	  * \param arg Opaque argument (passed as-is from the dentry_saved_arg field of struct dsmcc_carousel_callbacks
+	  * \param queue_id the queue ID that was returned by dsmcc_queue_carousel
 	  * \param cid the carousel ID
 	  * \param dir 0 if the dentry is a file, any other value indicate that the dentry is a directory
 	  * \param path the directory/file path relative to the carousel root
 	  * \param fullpath the directory/file path on disk
 	  */
-	void (*dentry_saved)(void *arg, uint32_t cid, bool dir, const char *path, const char *fullpath);
+	void (*dentry_saved)(void *arg, uint32_t queue_id, uint32_t cid, bool dir, const char *path, const char *fullpath);
 	/** argument for dentry_saved callback */
 	void  *dentry_saved_arg;
 
 	/** \brief Callback called when the download progression changes
 	  * \param arg Opaque argument (passed as-is from the download_progression_arg field of struct dsmcc_carousel_callbacks
+	  * \param queue_id the queue ID that was returned by dsmcc_queue_carousel
 	  * \param cid the carousel ID
 	  * \param downloaded the amount of bytes downloaded so far
 	  * \param total the total carousel size in bytes
 	  */
-	void (*download_progression)(void *arg, uint32_t cid, uint32_t downloaded, uint32_t total);
+	void (*download_progression)(void *arg, uint32_t queue_id, uint32_t cid, uint32_t downloaded, uint32_t total);
 	/** argument for total_carousel_bytes callback */
 	void  *download_progression_arg;
 
 	/** \brief Callback called when the carousel status changes
 	  * \param arg Opaque argument (passed as-is from the carousel_status_changed_arg field of struct dsmcc_carousel_callbacks
+	  * \param queue_id the queue ID that was returned by dsmcc_queue_carousel
 	  * \param cid the carousel ID
 	  * \param newstatus the new carousel status
 	  */
-	void (*carousel_status_changed)(void *arg, uint32_t cid, int newstatus);
+	void (*carousel_status_changed)(void *arg, uint32_t queue_id, uint32_t cid, int newstatus);
 	/** argument for carousel_status_changed callback */
 	void  *carousel_status_changed_arg;
 };
 
-/** \brief Add a carousel to the list of carousels to be parsed
+/** \brief Add a carousel to the list of carousels to be downloaded
   * \param state the library state
   * \param pid the PID of the stream where the carousel DSI message is broadcasted
   * \param transaction_id the transaction ID of the carousel DSI message or 0xFFFFFFFF to use the first DSI message found on the stream
   * \param downloadpath the directory where the carousel files will be downloaded
   * \param callbacks the callback that will be called during/after carousel download
+  * \return a carousel queue ID that will be used to remove the carousel
   */
-void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
+uint32_t dsmcc_queue_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id,
+		const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
 
-/** \brief Remove a carousel from the list of carousels to be parsed
+/** \brief Remove a carousel from the list of carousels to be downloaded
   * \param state the library state
-  * \param pid the PID of the stream where the carousel DSI message is broadcasted
+  * \param queue_id the queue ID that was returned by dsmcc_queue_carousel
   */
-void dsmcc_remove_carousel(struct dsmcc_state *state, uint16_t pid);
+void dsmcc_dequeue_carousel(struct dsmcc_state *state, uint32_t queue_id);
 
 /** \} */ // end of 'control' group
 

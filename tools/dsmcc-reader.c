@@ -81,30 +81,33 @@ static int add_section_filter(void *arg, uint16_t pid, uint8_t *pattern, uint8_t
 	return 0;
 }
 
-static bool dentry_check(void *arg, uint32_t cid, bool dir, const char *path, const char *fullpath)
+static bool dentry_check(void *arg, uint32_t queue_id, uint32_t cid, bool dir, const char *path, const char *fullpath)
 {
 	(void) arg;
 
-	fprintf(stderr, "[main] Callback: Dentry check 0x%08x:%s:%s -> %s\n", cid, dir ? "directory" : "file", path, fullpath);
+	fprintf(stderr, "[main] Callback(%u): Dentry check 0x%08x:%s:%s -> %s\n",
+			queue_id, cid, dir ? "directory" : "file", path, fullpath);
 
 	return 1;
 }
 
-static void dentry_saved(void *arg, uint32_t cid, bool dir, const char *path, const char *fullpath)
+static void dentry_saved(void *arg, uint32_t queue_id, uint32_t cid, bool dir, const char *path, const char *fullpath)
 {
 	(void) arg;
 
-	fprintf(stderr, "[main] Callback: Dentry saved 0x%08x:%s:%s -> %s\n", cid, dir ? "directory" : "file", path, fullpath);
+	fprintf(stderr, "[main] Callback(%u): Dentry saved 0x%08x:%s:%s -> %s\n",
+			queue_id, cid, dir ? "directory" : "file", path, fullpath);
 };
 
-static void download_progression(void *arg, uint32_t cid, uint32_t downloaded, uint32_t total)
+static void download_progression(void *arg, uint32_t queue_id, uint32_t cid, uint32_t downloaded, uint32_t total)
 {
 	(void) arg;
 
-	fprintf(stderr, "[main] Callback: Carousel 0x%08x: %u/%u\n", cid, downloaded, total);
+	fprintf(stderr, "[main] Callback(%u): Carousel 0x%08x: %u/%u\n",
+			queue_id, cid, downloaded, total);
 }
 
-static void carousel_status_changed(void *arg, uint32_t cid, int newstatus)
+static void carousel_status_changed(void *arg, uint32_t queue_id, uint32_t cid, int newstatus)
 {
 	const char *status;
 
@@ -125,7 +128,8 @@ static void carousel_status_changed(void *arg, uint32_t cid, int newstatus)
 			status = "Unknown!";
 			break;
 	}
-	fprintf(stderr, "[main] Callback: Carousel 0x%08x status changed to %s\n", cid, status);
+	fprintf(stderr, "[main] Callback(%u): Carousel 0x%08x status changed to %s\n",
+			queue_id, cid, status);
 
 	if (newstatus == DSMCC_STATUS_TIMEDOUT || newstatus == DSMCC_STATUS_DONE)
 	{
@@ -141,7 +145,6 @@ static int parse_stream(FILE *ts, struct dsmcc_state *state, struct dsmcc_tspars
 	char buf[188];
 	int ret = 0;
 	int rc;
-	int i = 0;
 
 	while (g_running && !g_complete)
 	{
@@ -160,7 +163,6 @@ static int parse_stream(FILE *ts, struct dsmcc_state *state, struct dsmcc_tspars
 		}
 		else
 		{
-			fprintf(stderr, "[main] read ts #%d\n", i++);
 			dsmcc_tsparser_parse_packet(state, buffers, (unsigned char*) buf, rc); 
 		}
 	}
@@ -175,6 +177,7 @@ int main(int argc, char **argv)
 	char *downloadpath;
 	FILE *ts;
 	uint16_t pid;
+	uint32_t qid;
 	struct dsmcc_tsparser_buffer *buffers = NULL;
 	struct dsmcc_dvb_callbacks dvb_callbacks;
 	struct dsmcc_carousel_callbacks car_callbacks;
@@ -213,7 +216,7 @@ int main(int argc, char **argv)
 		car_callbacks.dentry_saved = &dentry_saved;
 		car_callbacks.download_progression = &download_progression;
 		car_callbacks.carousel_status_changed = &carousel_status_changed;
-		dsmcc_add_carousel(state, pid, 0, downloadpath, &car_callbacks);
+		qid = dsmcc_queue_carousel(state, pid, 0, downloadpath, &car_callbacks);
 
 		status = parse_stream(ts, state, &buffers);
 
@@ -230,6 +233,8 @@ int main(int argc, char **argv)
 				fprintf(stderr, "Time out!\n");
 		}
 		pthread_mutex_unlock(&g_mutex);
+
+		dsmcc_dequeue_carousel(state, qid);
 
 		dsmcc_close(state);
 		dsmcc_tsparser_free_buffers(&buffers);

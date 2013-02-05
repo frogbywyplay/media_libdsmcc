@@ -9,7 +9,7 @@
 /* default timeout for aquisition of DSI message in microseconds (30s) */
 #define DEFAULT_DSI_TIMEOUT (30 * 1000000)
 
-#define CAROUSEL_CACHE_FILE_MAGIC 0xDDCC0001
+#define CAROUSEL_CACHE_FILE_MAGIC 0xDDCC0002
 
 static struct dsmcc_object_carousel *find_carousel_by_requested_pid(struct dsmcc_state *state, uint16_t pid)
 {
@@ -21,71 +21,85 @@ static struct dsmcc_object_carousel *find_carousel_by_requested_pid(struct dsmcc
 	return NULL;
 }
 
-void dsmcc_object_carousel_remove(struct dsmcc_state *state, uint16_t pid)
+static void stop_carousel(struct dsmcc_object_carousel *carousel)
 {
-	struct dsmcc_object_carousel *carousel;
+	DSMCC_DEBUG("Stopping download for carousel 0x%08x on PID 0x%04x", carousel->cid, carousel->requested_pid);
 
-	carousel = find_carousel_by_requested_pid(state, pid);
-	if (carousel)
-	{
-		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DSI);
-		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DII);
-		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
-		dsmcc_timeout_remove_all(carousel);
-	}
+	dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DSI);
+	dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DII);
+	dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
+	dsmcc_timeout_remove_all(carousel);
+	carousel->dsi_transaction_id = 0;
+	carousel->dii_transaction_id = 0;
+	if (carousel->status == DSMCC_STATUS_DOWNLOADING)
+		dsmcc_object_carousel_set_status(carousel, DSMCC_STATUS_PARTIAL);
 }
 
-void dsmcc_object_carousel_add(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
+static void start_carousel(struct dsmcc_object_carousel *carousel)
 {
-	struct dsmcc_object_carousel *car = NULL;
-	struct dsmcc_stream *stream;
+	if (carousel->status != DSMCC_STATUS_PARTIAL)
+		return;
 
-	/* Check if carousel is already requested */
-	car = find_carousel_by_requested_pid(state, pid);
-	if (!car)
-	{
-		stream = dsmcc_stream_find_by_pid(state, pid);
-		if (stream)
-			car = dsmcc_stream_queue_find(stream, DSMCC_QUEUE_ENTRY_DSI, transaction_id);
-	}
+	DSMCC_DEBUG("Starting download for carousel 0x%08x on PID 0x%04x", carousel->cid, carousel->requested_pid);
 
-	if (car)
-	{
-		dsmcc_stream_queue_remove(car, DSMCC_QUEUE_ENTRY_DSI);
-		dsmcc_cache_clear_filecache(car);
-		free(car->downloadpath);
-		car->dsi_transaction_id = 0;
-		car->dii_transaction_id = 0;
-	}
-	else
-	{
-		car = calloc(1, sizeof(struct dsmcc_object_carousel));
-		car->state = state;
-		car->next = state->carousels;
-		state->carousels = car;
-	}
-
-	car->downloadpath = strdup(downloadpath);
-	if (downloadpath[strlen(downloadpath) - 1] == '/')
-		car->downloadpath[strlen(downloadpath) - 1] = '\0';
-
-	memcpy(&car->callbacks, callbacks, sizeof(struct dsmcc_carousel_callbacks));
-	car->requested_pid = pid;
-	car->requested_transaction_id = transaction_id;
-	dsmcc_stream_queue_add(car, DSMCC_STREAM_SELECTOR_PID, pid, DSMCC_QUEUE_ENTRY_DSI, transaction_id);
+	dsmcc_stream_queue_add(carousel, DSMCC_STREAM_SELECTOR_PID, carousel->requested_pid, DSMCC_QUEUE_ENTRY_DSI, carousel->requested_transaction_id);
 	/* add section filter on stream for DSI (table_id == 0x3B, table_id_extension == 0x0000 or 0x0001) */
-	if (state->callbacks.add_section_filter)
+	if (carousel->state->callbacks.add_section_filter)
 	{
 		uint8_t pattern[3]  = { 0x3B, 0x00, 0x00 };
 		uint8_t equal[3]    = { 0xff, 0xff, 0xfe };
 		uint8_t notequal[3] = { 0x00, 0x00, 0x00 };
-		(*state->callbacks.add_section_filter)(state->callbacks.add_section_filter_arg, pid, pattern, equal, notequal, 3);
+		(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg,
+				carousel->requested_pid, pattern, equal, notequal, 3);
 	}
 
-	dsmcc_timeout_set(car, DSMCC_TIMEOUT_DSI, 0, DEFAULT_DSI_TIMEOUT);
+	dsmcc_timeout_set(carousel, DSMCC_TIMEOUT_DSI, 0, DEFAULT_DSI_TIMEOUT);
 
-	car->status = -1;
-	dsmcc_object_carousel_set_status(car, DSMCC_STATUS_DOWNLOADING);
+	dsmcc_object_carousel_set_status(carousel, DSMCC_STATUS_DOWNLOADING);
+}
+
+void dsmcc_object_carousel_queue_remove(struct dsmcc_state *state, uint32_t queue_id)
+{
+	struct dsmcc_object_carousel *carousel;
+	struct dsmcc_file_cache *filecache;
+
+	// remove filecache for queue_id
+	for (carousel = state->carousels; carousel; carousel = carousel->next)
+	{
+		filecache = dsmcc_filecache_find(carousel, queue_id);
+		if (filecache)
+		{
+			dsmcc_filecache_remove(filecache);
+			break;
+		}
+	}
+
+	// carousel found and has no more filecaches, stop it
+	if (carousel && !carousel->filecaches)
+		stop_carousel(carousel);
+}
+
+void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_id, uint16_t pid, uint32_t transaction_id,
+		const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
+{
+	struct dsmcc_object_carousel *carousel;
+
+	/* Check if carousel is already requested */
+	carousel = find_carousel_by_requested_pid(state, pid);
+	if (!carousel)
+	{
+		carousel = calloc(1, sizeof(struct dsmcc_object_carousel));
+		carousel->state = state;
+		carousel->status = DSMCC_STATUS_PARTIAL;
+		carousel->next = state->carousels;
+		carousel->requested_pid = pid;
+		carousel->requested_transaction_id = transaction_id;
+		state->carousels = carousel;
+	}
+
+	dsmcc_filecache_add(carousel, queue_id, downloadpath, callbacks);
+
+	start_carousel(carousel);
 }
 
 #ifdef DEBUG
@@ -93,6 +107,8 @@ static const char *status_str(int status)
 {
 	switch (status)
 	{
+		case DSMCC_STATUS_PARTIAL:
+			return "PARTIAL";
 		case DSMCC_STATUS_DOWNLOADING:
 			return "DOWNLOADING";
 		case DSMCC_STATUS_TIMEDOUT:
@@ -112,29 +128,21 @@ void dsmcc_object_carousel_set_status(struct dsmcc_object_carousel *carousel, in
 
 	DSMCC_DEBUG("Carousel 0x%08x status changed to %s", carousel->cid, status_str(newstatus));
 	carousel->status = newstatus;
-
-	if (carousel->callbacks.carousel_status_changed)
-		(*carousel->callbacks.carousel_status_changed)(carousel->callbacks.carousel_status_changed_arg, carousel->cid, carousel->status);
-}
-
-void dsmcc_object_carousel_set_progression(struct dsmcc_object_carousel *carousel, uint32_t downloaded, uint32_t total)
-{
-	DSMCC_DEBUG("Carousel 0x%08x downloaded %u total %u", carousel->cid, downloaded, total);
-	if (carousel->callbacks.download_progression)
-		(*carousel->callbacks.download_progression)(carousel->callbacks.download_progression_arg, carousel->cid, downloaded, total);
 }
 
 void dsmcc_object_carousel_free(struct dsmcc_object_carousel *carousel, bool keep_cache)
 {
-	/* Free modules */
+	/* stop carousel (timers, stream queues) */
+	stop_carousel(carousel);
+
+	/* free filecaches */
+	dsmcc_filecache_remove_all(carousel);
+
+	/* free modules */
 	dsmcc_cache_free_all_modules(carousel, keep_cache);
 	carousel->modules = NULL;
 
-	/* Free filecache */
-	dsmcc_filecache_free(carousel, 1);
-	carousel->filecache = NULL;
-
-	free(carousel->downloadpath);
+	/* free remaining data */
 	free(carousel);
 }
 
@@ -179,9 +187,6 @@ bool dsmcc_object_carousel_load_all(FILE *f, struct dsmcc_state *state)
 			goto error;
 		if (!fread(&tmp, 1, sizeof(uint32_t), f))
 			goto error;
-		carousel->downloadpath = malloc(tmp);
-		if (!fread(carousel->downloadpath, 1, tmp, f))
-			goto error;
 		if (!fread(&carousel->status, 1, sizeof(int), f))
 			goto error;
 		if (!fread(&carousel->requested_pid, 1, sizeof(uint16_t), f))
@@ -222,9 +227,6 @@ void dsmcc_object_carousel_save_all(FILE *f, struct dsmcc_state *state)
 		tmp = 0;
 		fwrite(&tmp, 1, sizeof(uint32_t), f);
 		fwrite(&carousel->cid, 1, sizeof(uint32_t), f);
-		tmp = strlen(carousel->downloadpath) + 1;
-		fwrite(&tmp, 1, sizeof(uint32_t), f);
-		fwrite(carousel->downloadpath, 1, tmp, f);
 		fwrite(&carousel->status, 1, sizeof(int), f);
 		fwrite(&carousel->requested_pid, 1, sizeof(uint16_t), f);
 		fwrite(&carousel->requested_transaction_id, 1, sizeof(uint32_t), f);

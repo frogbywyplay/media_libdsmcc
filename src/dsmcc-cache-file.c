@@ -50,12 +50,18 @@ struct dsmcc_cached_file
 
 struct dsmcc_file_cache
 {
-	struct dsmcc_object_carousel *carousel;
+	struct dsmcc_object_carousel   *carousel;
+	uint32_t                        queue_id;
+	char                           *downloadpath;
+	struct dsmcc_carousel_callbacks callbacks;
+	int                             last_carousel_status;
 
 	struct dsmcc_cached_dir  *gateway;
 	struct dsmcc_cached_dir  *orphan_dirs;
 	struct dsmcc_cached_file *orphan_files;
 	struct dsmcc_cached_file *nameless_files;
+
+	struct dsmcc_file_cache *prev, *next;
 };
 
 static int idcmp(struct dsmcc_object_id *id1, struct dsmcc_object_id *id2)
@@ -69,16 +75,42 @@ static int idcmp(struct dsmcc_object_id *id1, struct dsmcc_object_id *id2)
 	return (id1->key & id1->key_mask) == (id2->key & id2->key_mask);
 }
 
-static void init_filecache(struct dsmcc_object_carousel *carousel)
+struct dsmcc_file_cache *dsmcc_filecache_add(struct dsmcc_object_carousel *carousel, uint32_t queue_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
 {
-	if (!carousel->filecache)
-	{
-		carousel->filecache = calloc(1, sizeof(struct dsmcc_file_cache));
-		carousel->filecache->carousel = carousel;
-	}
+	struct dsmcc_file_cache *filecache;
+
+	filecache = calloc(1, sizeof(struct dsmcc_file_cache));
+	filecache->carousel = carousel;
+	filecache->queue_id = queue_id;
+	filecache->last_carousel_status = -1;
+
+	filecache->downloadpath = strdup(downloadpath);
+	if (downloadpath[strlen(downloadpath) - 1] == '/')
+		filecache->downloadpath[strlen(downloadpath) - 1] = '\0';
+
+	memcpy(&filecache->callbacks, callbacks, sizeof(struct dsmcc_carousel_callbacks));
+
+	filecache->prev = NULL;
+	filecache->next = carousel->filecaches;
+	if (filecache->next)
+		filecache->next->prev = filecache;
+	carousel->filecaches = filecache;
+
+	dsmcc_cache_init_new_filecache(carousel, filecache);
+
+	return filecache;
 }
 
-static void free_files(struct dsmcc_cached_file *file, bool keep_files)
+struct dsmcc_file_cache *dsmcc_filecache_find(struct dsmcc_object_carousel *carousel, uint32_t queue_id)
+{
+	struct dsmcc_file_cache *filecache;
+	for (filecache = carousel->filecaches; filecache; filecache = filecache->next)
+		if (filecache->queue_id == queue_id)
+			return filecache;
+	return NULL;
+}
+
+static void free_files(struct dsmcc_cached_file *file)
 {
 	struct dsmcc_cached_file *next;
 
@@ -91,11 +123,7 @@ static void free_files(struct dsmcc_cached_file *file, bool keep_files)
 		if (file->name)
 			free(file->name);
 		if (file->path)
-		{
-			if (!keep_files)
-				unlink(file->path);
 			free(file->path);
-		}
 		if (file->data_file)
 			free(file->data_file);
 		free(file);
@@ -103,7 +131,7 @@ static void free_files(struct dsmcc_cached_file *file, bool keep_files)
 	}
 }
 
-static void free_dirs(struct dsmcc_cached_dir *dir, bool keep_files)
+static void free_dirs(struct dsmcc_cached_dir *dir)
 {
 	struct dsmcc_cached_dir *subdir, *subdirnext;
 
@@ -114,34 +142,72 @@ static void free_dirs(struct dsmcc_cached_dir *dir, bool keep_files)
 	while (subdir)
 	{
 		subdirnext = subdir->next;
-		free_dirs(subdir, keep_files);
+		free_dirs(subdir);
 		subdir = subdirnext;
 	}
 
-	free_files(dir->files, keep_files);
+	free_files(dir->files);
 
 	if (dir->name)
 		free(dir->name);
 	if (dir->path)
-	{
-		if (!keep_files)
-			rmdir(dir->path);
 		free(dir->path);
-	}
 	free(dir);
 }
 
-void dsmcc_filecache_free(struct dsmcc_object_carousel *carousel, bool keep_files)
+static void dsmcc_filecache_clear(struct dsmcc_file_cache *filecache)
 {
-	if (!carousel->filecache)
-		return;
+	free_dirs(filecache->gateway);
+	filecache->gateway = NULL;
+	free_dirs(filecache->orphan_dirs);
+	filecache->orphan_dirs = NULL;
+	free_files(filecache->orphan_files);
+	filecache->orphan_files = NULL;
+	free_files(filecache->nameless_files);
+	filecache->nameless_files = NULL;
+}
 
-	free_dirs(carousel->filecache->gateway, keep_files);
-	free_dirs(carousel->filecache->orphan_dirs, 0);
-	free_files(carousel->filecache->orphan_files, 0);
-	free_files(carousel->filecache->nameless_files, 0);
-	free(carousel->filecache);
-	carousel->filecache = NULL;
+void dsmcc_filecache_clear_all(struct dsmcc_object_carousel *carousel)
+{
+	struct dsmcc_file_cache *filecache;
+	for (filecache = carousel->filecaches; filecache; filecache = filecache->next)
+		dsmcc_filecache_clear(filecache);
+}
+
+void dsmcc_filecache_remove_all(struct dsmcc_object_carousel *carousel)
+{
+	struct dsmcc_file_cache *filecache;
+	struct dsmcc_file_cache *next;
+
+	for (filecache = carousel->filecaches; filecache; filecache = next)
+	{
+		next = filecache->next;
+
+		dsmcc_filecache_clear(filecache);
+		free(filecache->downloadpath);
+		free(filecache);
+	}
+
+	carousel->filecaches = NULL;
+}
+
+void dsmcc_filecache_remove(struct dsmcc_file_cache *filecache)
+{
+	DSMCC_DEBUG("Removing filecache with queue_id %u", filecache->queue_id);
+	dsmcc_filecache_clear(filecache);
+	free(filecache->downloadpath);
+	if (filecache->next)
+		filecache->next->prev = filecache->prev;
+	if (filecache->prev)
+		filecache->prev->next = filecache->next;
+	else
+		filecache->carousel->filecaches = filecache->next;
+	free(filecache);
+}
+
+struct dsmcc_file_cache *dsmcc_filecache_next(struct dsmcc_file_cache *filecache)
+{
+	return filecache->next;
 }
 
 static void add_file_to_list(struct dsmcc_cached_file **list_head, struct dsmcc_cached_file *file)
@@ -218,7 +284,7 @@ static struct dsmcc_cached_dir *find_dir_in_subdirs(struct dsmcc_cached_dir *par
 	return NULL;
 }
 
-static void link_file(struct dsmcc_object_carousel *carousel, struct dsmcc_cached_file *file)
+static void link_file(struct dsmcc_file_cache *filecache, struct dsmcc_cached_file *file)
 {
 	char *fn;
 
@@ -231,13 +297,19 @@ static void link_file(struct dsmcc_object_carousel *carousel, struct dsmcc_cache
 	file->path = malloc(strlen(file->parent->path) + strlen(file->name) + 2);
 	sprintf(file->path, "%s/%s", file->parent->path, file->name);
 
-	fn = malloc(strlen(carousel->downloadpath) + strlen(file->path) + 2);
-	sprintf(fn, "%s%s%s", carousel->downloadpath, file->path[0] == '/' ? "" : "/", file->path);
+	fn = malloc(strlen(filecache->downloadpath) + strlen(file->path) + 2);
+	sprintf(fn, "%s%s%s", filecache->downloadpath, file->path[0] == '/' ? "" : "/", file->path);
 
-	if (carousel->callbacks.dentry_check && !(*carousel->callbacks.dentry_check)(carousel->callbacks.dentry_check_arg, carousel->cid, 0, file->path, fn))
+	if (filecache->callbacks.dentry_check)
 	{
-		DSMCC_DEBUG("Skipping file %s as requested", file->path);
-		goto cleanup;
+		DSMCC_DEBUG("Filecache calling callback dentry_check(%u, 0x%08x, 0, '%s', '%s')",
+				filecache->queue_id, filecache->carousel->cid, file->path, fn);
+		if (!(*filecache->callbacks.dentry_check)(filecache->callbacks.dentry_check_arg,
+				filecache->queue_id, filecache->carousel->cid, 0, file->path, fn))
+		{
+			DSMCC_DEBUG("Skipping file %s as requested", file->path);
+			goto cleanup;
+		}
 	}
 
 	DSMCC_DEBUG("Linking data from %s to %s", file->data_file, fn);
@@ -245,15 +317,20 @@ static void link_file(struct dsmcc_object_carousel *carousel, struct dsmcc_cache
 	{
 		file->written = 1;
 
-		if (carousel->callbacks.dentry_saved)
-			(*carousel->callbacks.dentry_saved)(carousel->callbacks.dentry_saved_arg, carousel->cid, 0, file->path, fn);
+		if (filecache->callbacks.dentry_saved)
+		{
+			DSMCC_DEBUG("Filecache calling callback dentry_saved(%u, 0x%08x, 0, '%s', '%s')",
+					filecache->queue_id, filecache->carousel->cid, file->path, fn);
+			(*filecache->callbacks.dentry_saved)(filecache->callbacks.dentry_saved_arg,
+					filecache->queue_id, filecache->carousel->cid, 0, file->path, fn);
+		}
 	}
 
 cleanup:
 	free(fn);
 }
 
-static void write_dir(struct dsmcc_object_carousel *carousel, struct dsmcc_cached_dir *dir)
+static void write_dir(struct dsmcc_file_cache *filecache, struct dsmcc_cached_dir *dir)
 {
 	bool gateway;
 	struct dsmcc_cached_dir *subdir;
@@ -264,27 +341,30 @@ static void write_dir(struct dsmcc_object_carousel *carousel, struct dsmcc_cache
 	if (dir->written)
 		return;
 
-	gateway = (dir == carousel->filecache->gateway);
+	gateway = (dir == filecache->gateway);
 
 	if (gateway)
 	{
 		DSMCC_DEBUG("Writing out gateway dir");
 		dir->path = strdup("");
-		dn = strdup(carousel->downloadpath);
+		dn = strdup(filecache->downloadpath);
 	}
 	else
 	{
 		DSMCC_DEBUG("Writing out dir %s under dir %s", dir->name, dir->parent->path);
 		dir->path = malloc(strlen(dir->parent->path) + strlen(dir->name) + 2);
 		sprintf(dir->path, "%s/%s", dir->parent->path, dir->name);
-		dn = malloc(strlen(carousel->downloadpath) + strlen(dir->path) + 2);
-		sprintf(dn, "%s/%s", carousel->downloadpath, dir->path);
+		dn = malloc(strlen(filecache->downloadpath) + strlen(dir->path) + 2);
+		sprintf(dn, "%s/%s", filecache->downloadpath, dir->path);
 	}
 
 	/* call callback (except for gateway) */
-	if (!gateway && carousel->callbacks.dentry_check)
+	if (!gateway && filecache->callbacks.dentry_check)
 	{
-		if (!(*carousel->callbacks.dentry_check)(carousel->callbacks.dentry_check_arg, carousel->cid, 1, dir->path, dn))
+		DSMCC_DEBUG("Filecache calling callback dentry_check(%u, 0x%08x, 1, '%s', '%s')",
+				filecache->queue_id, filecache->carousel->cid, dir->path, dn);
+		if (!(*filecache->callbacks.dentry_check)(filecache->callbacks.dentry_check_arg,
+				filecache->queue_id, filecache->carousel->cid, 1, dir->path, dn))
 		{
 			DSMCC_DEBUG("Skipping directory %s as requested", dir->path);
 			goto end;
@@ -296,16 +376,21 @@ static void write_dir(struct dsmcc_object_carousel *carousel, struct dsmcc_cache
 	dir->written = 1;
 
 	/* register and call callback (except for gateway) */
-	if (!gateway && carousel->callbacks.dentry_saved)
-		(*carousel->callbacks.dentry_saved)(carousel->callbacks.dentry_saved_arg, carousel->cid, 1, dir->path, dn);
+	if (!gateway && filecache->callbacks.dentry_saved)
+	{
+		DSMCC_DEBUG("Filecache calling callback dentry_saved(%u, 0x%08x, 1, '%s', '%s')",
+				filecache->queue_id, filecache->carousel->cid, dir->path, dn);
+		(*filecache->callbacks.dentry_saved)(filecache->callbacks.dentry_saved_arg,
+				filecache->queue_id, filecache->carousel->cid, 1, dir->path, dn);
+	}
 
 	/* Write out files that had arrived before directory */
 	for (file = dir->files; file; file = file->next)
-		link_file(carousel, file);
+		link_file(filecache, file);
 
 	/* Recurse through child directories */
 	for (subdir = dir->subdirs; subdir; subdir = subdir->next)
-		write_dir(carousel, subdir);
+		write_dir(filecache, subdir);
 
 end:
 	if (dn)
@@ -332,14 +417,10 @@ static struct dsmcc_cached_dir *find_cached_dir(struct dsmcc_file_cache *filecac
 	return dir;
 }
 
-void dsmcc_filecache_cache_dir(struct dsmcc_object_carousel *carousel, struct dsmcc_object_id *parent_id, struct dsmcc_object_id *id, const char *name)
+void dsmcc_filecache_cache_dir(struct dsmcc_file_cache *filecache, struct dsmcc_object_id *parent_id, struct dsmcc_object_id *id, const char *name)
 {
-	struct dsmcc_file_cache *filecache;
 	struct dsmcc_cached_dir *dir, *subdir, *subdirnext;
 	struct dsmcc_cached_file *file, *filenext;
-
-	init_filecache(carousel);
-	filecache = carousel->filecache;
 
 	dir = find_cached_dir(filecache, id);
 	if (dir)
@@ -411,7 +492,7 @@ void dsmcc_filecache_cache_dir(struct dsmcc_object_carousel *carousel, struct ds
 
 	/* Write dir/files to filesystem */
 	if (dir == filecache->gateway || (dir->parent && dir->parent->written))
-		write_dir(carousel, dir);
+		write_dir(filecache, dir);
 }
 
 static struct dsmcc_cached_file *find_file_in_dir(struct dsmcc_cached_dir *dir, struct dsmcc_object_id *id)
@@ -450,13 +531,9 @@ static struct dsmcc_cached_file *find_file(struct dsmcc_file_cache *filecache, s
 	return file;
 }
 
-void dsmcc_filecache_cache_file(struct dsmcc_object_carousel *carousel, struct dsmcc_object_id *parent_id, struct dsmcc_object_id *id, const char *name)
+void dsmcc_filecache_cache_file(struct dsmcc_file_cache *filecache, struct dsmcc_object_id *parent_id, struct dsmcc_object_id *id, const char *name)
 {
-	struct dsmcc_file_cache *filecache;
 	struct dsmcc_cached_file *file;
-
-	init_filecache(carousel);
-	filecache = carousel->filecache;
 
 	/* Check we do not already have file info or data cached  */
 	if (find_file(filecache, id))
@@ -488,19 +565,15 @@ void dsmcc_filecache_cache_file(struct dsmcc_object_carousel *carousel, struct d
 	if (file->parent)
 	{
 		add_file_to_list(&file->parent->files, file);
-		link_file(carousel, file);
+		link_file(filecache, file);
 	}
 	else
 		add_file_to_list(&filecache->orphan_files, file);
 }
 
-void dsmcc_filecache_cache_data(struct dsmcc_object_carousel *carousel, struct dsmcc_object_id *id, const char *data_file, uint32_t data_size)
+void dsmcc_filecache_cache_data(struct dsmcc_file_cache *filecache, struct dsmcc_object_id *id, const char *data_file, uint32_t data_size)
 {
-	struct dsmcc_file_cache *filecache;
 	struct dsmcc_cached_file *file;
-
-	init_filecache(carousel);
-	filecache = carousel->filecache;
 
 	/* search for file info */
 	file = find_file(filecache, id);
@@ -525,11 +598,28 @@ void dsmcc_filecache_cache_data(struct dsmcc_object_carousel *carousel, struct d
 		{
 			file->data_file = strdup(data_file);
 
-			link_file(carousel, file);
+			link_file(filecache, file);
 		}
 		else
 		{
 			DSMCC_DEBUG("Data for file %s in dir %s had already been saved", file->name, file->parent->path);
 		}
+	}
+}
+
+void dsmcc_filecache_notify_progression(struct dsmcc_file_cache *filecache, uint32_t downloaded, uint32_t total)
+{
+	DSMCC_DEBUG("Filecache calling callback download_progression(%u, 0x%08x, %u, %u)",
+			filecache->queue_id, filecache->carousel->cid, downloaded, total);
+	(*filecache->callbacks.download_progression)(filecache->callbacks.download_progression_arg,
+			filecache->queue_id, filecache->carousel->cid, downloaded, total);
+
+	if (filecache->carousel->status != filecache->last_carousel_status)
+	{
+		filecache->last_carousel_status = filecache->carousel->status;
+		DSMCC_DEBUG("Filecache calling callback carousel_status_changed(%u, 0x%08x, %d)",
+				filecache->queue_id, filecache->carousel->cid, filecache->carousel->status);
+		(*filecache->callbacks.carousel_status_changed)(filecache->callbacks.carousel_status_changed_arg,
+				filecache->queue_id, filecache->carousel->cid, filecache->carousel->status);
 	}
 }

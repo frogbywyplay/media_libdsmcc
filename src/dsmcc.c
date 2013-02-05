@@ -134,17 +134,19 @@ void *dsmcc_thread_func(void *arg)
 			switch (action->type)
 			{
 				case DSMCC_ACTION_ADD_CAROUSEL:
-					DSMCC_DEBUG("Adding carousel on PID 0x%04x", action->add_carousel.pid);
-					dsmcc_object_carousel_add(state, action->add_carousel.pid, action->add_carousel.transaction_id,
-							action->add_carousel.downloadpath, &action->add_carousel.callbacks);
+					DSMCC_DEBUG("Adding carousel to queue, PID 0x%04x queue_id %u",
+							action->add_carousel.pid, action->add_carousel.queue_id);
+					dsmcc_object_carousel_queue_add(state, action->add_carousel.queue_id, action->add_carousel.pid,
+							action->add_carousel.transaction_id, action->add_carousel.downloadpath,
+							&action->add_carousel.callbacks);
 					free(action->add_carousel.downloadpath);
 					break;
 				case DSMCC_ACTION_REMOVE_CAROUSEL:
-					DSMCC_DEBUG("Removing carousel on PID 0x%04x", action->add_carousel.pid);
-					dsmcc_object_carousel_remove(state, action->remove_carousel.pid);
+					DSMCC_DEBUG("Removing carousel from queue, queue_id %u", action->remove_carousel.queue_id);
+					dsmcc_object_carousel_queue_remove(state, action->remove_carousel.queue_id);
 					break;
 				case DSMCC_ACTION_ADD_SECTION:
-					DSMCC_DEBUG("Parsing a section for PID 0x%04x, size %d", action->add_section.section->pid,
+					DSMCC_DEBUG("Parsing a section for PID 0x%04x size %d", action->add_section.section->pid,
 							action->add_section.section->length);
 					dsmcc_parse_section(state, action->add_section.section);
 					free(action->add_section.section);
@@ -615,24 +617,33 @@ void dsmcc_add_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, i
 	buffer_action(state, action);
 }
 
-void dsmcc_add_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
+uint32_t dsmcc_queue_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
 {
 	struct dsmcc_action *action;
+	uint32_t queue_id;
+
+	pthread_mutex_lock(&state->mutex);
+	queue_id = state->next_queue_id++;
+	pthread_mutex_unlock(&state->mutex);
+
 	action = calloc(1, sizeof(struct dsmcc_action));
 	action->type = DSMCC_ACTION_ADD_CAROUSEL;
+	action->add_carousel.queue_id = queue_id;
 	action->add_carousel.pid = pid;
 	action->add_carousel.transaction_id = transaction_id;
 	action->add_carousel.downloadpath = strdup(downloadpath);
 	memcpy(&action->add_carousel.callbacks, callbacks, sizeof(struct dsmcc_carousel_callbacks));
 	buffer_action(state, action);
+
+	return queue_id;
 }
 
-void dsmcc_remove_carousel(struct dsmcc_state *state, uint16_t pid)
+void dsmcc_dequeue_carousel(struct dsmcc_state *state, uint32_t queue_id)
 {
 	struct dsmcc_action *action;
 	action = calloc(1, sizeof(struct dsmcc_action));
 	action->type = DSMCC_ACTION_REMOVE_CAROUSEL;
-	action->remove_carousel.pid = pid;
+	action->remove_carousel.queue_id = queue_id;
 	buffer_action(state, action);
 }
 

@@ -66,6 +66,7 @@ struct dsmcc_action
 
 	union {
 		struct {
+			uint32_t queue_id;
 			uint16_t pid;
 			uint32_t transaction_id;
 			char *downloadpath;
@@ -73,7 +74,7 @@ struct dsmcc_action
 		} add_carousel;
 
 		struct {
-			uint16_t pid;
+			uint32_t queue_id;
 		} remove_carousel;
 
 		struct {
@@ -93,6 +94,7 @@ struct dsmcc_state
 	char *cachedir;   /*< path of the directory where cached files will be stored */
 	char *cachefile;  /*< name of the file where cached state will be stored */
 	bool  keep_cache; /*< if the cache should be kept at exit */
+	uint32_t next_queue_id;
 
 	struct dsmcc_dvb_callbacks callbacks;    /*< Callbacks called to interract with DVB stack */
 

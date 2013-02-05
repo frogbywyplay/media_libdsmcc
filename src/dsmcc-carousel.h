@@ -8,10 +8,7 @@ struct dsmcc_object_carousel
 {
 	struct dsmcc_state *state;
 	uint32_t            cid;
-	char               *downloadpath;
 	int                 status;
-
-	struct dsmcc_carousel_callbacks callbacks;
 
 	uint16_t requested_pid;
 	uint32_t requested_transaction_id;
@@ -20,19 +17,18 @@ struct dsmcc_object_carousel
 	uint32_t dii_transaction_id;
 
 	struct dsmcc_module     *modules;
-	struct dsmcc_file_cache *filecache;
+	struct dsmcc_file_cache *filecaches;
 
 	struct dsmcc_object_carousel *next;
 };
 
-void dsmcc_object_carousel_add(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id,
+void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_id, uint16_t pid, uint32_t transaction_id,
 		const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
-void dsmcc_object_carousel_remove(struct dsmcc_state *state, uint16_t pid);
+void dsmcc_object_carousel_queue_remove(struct dsmcc_state *state, uint32_t queue_id);
 bool dsmcc_object_carousel_load_all(FILE *file, struct dsmcc_state *state);
 void dsmcc_object_carousel_save_all(FILE *file, struct dsmcc_state *state);
 void dsmcc_object_carousel_free(struct dsmcc_object_carousel *carousel, bool keep_cache);
 void dsmcc_object_carousel_free_all(struct dsmcc_state *state, bool keep_cache);
-void dsmcc_object_carousel_set_progression(struct dsmcc_object_carousel *carousel, uint32_t downloaded, uint32_t total);
 void dsmcc_object_carousel_set_status(struct dsmcc_object_carousel *carousel, int newstatus);
 
 #endif

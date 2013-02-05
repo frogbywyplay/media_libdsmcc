@@ -369,7 +369,7 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 
 	/* remove outdated modules and files */
 	dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
-	dsmcc_cache_clear_filecache(carousel);
+	dsmcc_filecache_clear_all(carousel);
 	dsmcc_cache_remove_unneeded_modules(carousel, modules_id, number_modules);
 
 	/* add modules info to module cache */
