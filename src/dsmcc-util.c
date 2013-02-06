@@ -144,8 +144,15 @@ bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int l
 	else
 	{
 		DSMCC_DEBUG("Renaming %s to %s", tmpfile, dstfile);
-		rename(tmpfile, dstfile);
-		ret = 1;
+		if(!rename(tmpfile, dstfile))
+		{
+			ret = 1;
+		}
+		else
+		{
+			DSMCC_ERROR("Renaming error '%s' -> '%s': %s", tmpfile, dstfile, strerror(errno));
+			ret = 0;
+		}
 	}
 
 cleanup:

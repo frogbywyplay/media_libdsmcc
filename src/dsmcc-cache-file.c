@@ -597,6 +597,7 @@ void dsmcc_filecache_cache_data(struct dsmcc_file_cache *filecache, struct dsmcc
 		if (!file->written)
 		{
 			file->data_file = strdup(data_file);
+			file->data_size = data_size;
 
 			link_file(filecache, file);
 		}
