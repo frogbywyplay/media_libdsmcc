@@ -1,5 +1,8 @@
 libdsmcc changelog file.
-Last Modification Date: 05/02/2013
+Last Modification Date: 06/02/2013
+
+3.0.1 -- 06/02/2013
+- Fixed link_file function (wrong size given to dsmcc_file_link function)
 
 3.0.0 -- 05/02/2013
 - Made all API calls thread-safe (except dsmcc_open / dsmcc_close)
