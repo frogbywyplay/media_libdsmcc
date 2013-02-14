@@ -105,10 +105,7 @@ void *dsmcc_thread_func(void *arg)
 
 				wakets.tv_sec = waketime->tv_sec;
 				wakets.tv_nsec = waketime->tv_usec * 1000;
-				if (pthread_cond_timedwait(&state->cond, &state->mutex, &wakets) == ETIMEDOUT)
-				{
-					pthread_mutex_lock(&state->mutex);
-				}
+				pthread_cond_timedwait(&state->cond, &state->mutex, &wakets);
 			}
 			else
 			{
