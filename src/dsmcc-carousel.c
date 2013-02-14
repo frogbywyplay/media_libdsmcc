@@ -185,8 +185,6 @@ bool dsmcc_object_carousel_load_all(FILE *f, struct dsmcc_state *state)
 		carousel->state = state;
 		if (!fread(&carousel->cid, 1, sizeof(uint32_t), f))
 			goto error;
-		if (!fread(&tmp, 1, sizeof(uint32_t), f))
-			goto error;
 		if (!fread(&carousel->status, 1, sizeof(int), f))
 			goto error;
 		if (!fread(&carousel->requested_pid, 1, sizeof(uint16_t), f))
