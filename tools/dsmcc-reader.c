@@ -115,6 +115,9 @@ static void carousel_status_changed(void *arg, uint32_t queue_id, uint32_t cid, 
 
 	switch (newstatus)
 	{
+		case DSMCC_STATUS_PARTIAL:
+			status = "PARTIAL";
+			break;
 		case DSMCC_STATUS_DOWNLOADING:
 			status = "DOWNLOADING";
 			break;
