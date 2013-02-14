@@ -40,7 +40,7 @@ static void stop_carousel(struct dsmcc_object_carousel *carousel)
 
 static void start_carousel(struct dsmcc_object_carousel *carousel)
 {
-	if (carousel->status != DSMCC_STATUS_PARTIAL)
+	if (carousel->status != DSMCC_STATUS_PARTIAL && carousel->status != DSMCC_STATUS_TIMEDOUT)
 		return;
 
 	DSMCC_DEBUG("Starting download for carousel 0x%08x on PID 0x%04x", carousel->cid, carousel->requested_pid);
@@ -101,9 +101,8 @@ void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_i
 		state->carousels = carousel;
 	}
 
-	dsmcc_filecache_add(carousel, queue_id, downloadpath, callbacks);
-
 	start_carousel(carousel);
+	dsmcc_filecache_add(carousel, queue_id, downloadpath, callbacks);
 }
 
 #ifdef DEBUG
