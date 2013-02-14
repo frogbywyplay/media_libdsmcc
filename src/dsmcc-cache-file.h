@@ -23,6 +23,7 @@ void dsmcc_filecache_cache_dir(struct dsmcc_file_cache *filecache, struct dsmcc_
 void dsmcc_filecache_cache_file(struct dsmcc_file_cache *filecache, struct dsmcc_object_id *parent_id, struct dsmcc_object_id *id, const char *name);
 void dsmcc_filecache_cache_data(struct dsmcc_file_cache *filecache, struct dsmcc_object_id *id, const char *data_file, uint32_t data_size);
 
-void dsmcc_filecache_notify_progression(struct dsmcc_file_cache *filecache, uint32_t downloaded, uint32_t total);
+void dsmcc_filecache_notify_progression(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache, uint32_t downloaded, uint32_t total);
+void dsmcc_filecache_notify_status(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache);
 
 #endif /* DSMCC_CACHE_FILE_H */

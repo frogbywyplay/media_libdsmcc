@@ -608,19 +608,38 @@ void dsmcc_filecache_cache_data(struct dsmcc_file_cache *filecache, struct dsmcc
 	}
 }
 
-void dsmcc_filecache_notify_progression(struct dsmcc_file_cache *filecache, uint32_t downloaded, uint32_t total)
+void dsmcc_filecache_notify_progression(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache, uint32_t downloaded, uint32_t total)
 {
-	DSMCC_DEBUG("Filecache calling callback download_progression(%u, 0x%08x, %u, %u)",
-			filecache->queue_id, filecache->carousel->cid, downloaded, total);
-	(*filecache->callbacks.download_progression)(filecache->callbacks.download_progression_arg,
-			filecache->queue_id, filecache->carousel->cid, downloaded, total);
-
-	if (filecache->carousel->status != filecache->last_carousel_status)
+	if (filecache)
 	{
-		filecache->last_carousel_status = filecache->carousel->status;
-		DSMCC_DEBUG("Filecache calling callback carousel_status_changed(%u, 0x%08x, %d)",
-				filecache->queue_id, filecache->carousel->cid, filecache->carousel->status);
-		(*filecache->callbacks.carousel_status_changed)(filecache->callbacks.carousel_status_changed_arg,
-				filecache->queue_id, filecache->carousel->cid, filecache->carousel->status);
+		DSMCC_DEBUG("Filecache calling callback download_progression(%u, 0x%08x, %u, %u)",
+				filecache->queue_id, filecache->carousel->cid, downloaded, total);
+		(*filecache->callbacks.download_progression)(filecache->callbacks.download_progression_arg,
+				filecache->queue_id, filecache->carousel->cid, downloaded, total);
+	}
+	else
+	{
+		for (filecache = carousel->filecaches; filecache; filecache = dsmcc_filecache_next(filecache))
+			dsmcc_filecache_notify_progression(carousel, filecache, downloaded, total);
+	}
+}
+
+void dsmcc_filecache_notify_status(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache)
+{
+	if (filecache)
+	{
+		if (filecache->carousel->status != filecache->last_carousel_status)
+		{
+			filecache->last_carousel_status = filecache->carousel->status;
+			DSMCC_DEBUG("Filecache calling callback carousel_status_changed(%u, 0x%08x, %d)",
+					filecache->queue_id, filecache->carousel->cid, filecache->carousel->status);
+			(*filecache->callbacks.carousel_status_changed)(filecache->callbacks.carousel_status_changed_arg,
+					filecache->queue_id, filecache->carousel->cid, filecache->carousel->status);
+		}
+	}
+	else
+	{
+		for (filecache = carousel->filecaches; filecache; filecache = dsmcc_filecache_next(filecache))
+			dsmcc_filecache_notify_status(carousel, filecache);
 	}
 }

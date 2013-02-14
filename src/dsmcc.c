@@ -11,6 +11,7 @@
 #include "dsmcc-util.h"
 #include "dsmcc-carousel.h"
 #include "dsmcc-section.h"
+#include "dsmcc-cache-file.h"
 
 struct dsmcc_queue_entry
 {
@@ -198,6 +199,7 @@ void *dsmcc_thread_func(void *arg)
 				if (timercmp(&timeout->abstime, &curtime, <))
 				{
 					dsmcc_object_carousel_set_status(timeout->carousel, DSMCC_STATUS_TIMEDOUT);
+					dsmcc_filecache_notify_status(timeout->carousel, NULL);
 
 					/* remove timeout */
 					if (prevtimeout)

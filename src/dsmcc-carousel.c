@@ -32,7 +32,10 @@ static void stop_carousel(struct dsmcc_object_carousel *carousel)
 	carousel->dsi_transaction_id = 0;
 	carousel->dii_transaction_id = 0;
 	if (carousel->status == DSMCC_STATUS_DOWNLOADING)
+	{
 		dsmcc_object_carousel_set_status(carousel, DSMCC_STATUS_PARTIAL);
+		dsmcc_filecache_notify_status(carousel, NULL);
+	}
 }
 
 static void start_carousel(struct dsmcc_object_carousel *carousel)
@@ -56,6 +59,7 @@ static void start_carousel(struct dsmcc_object_carousel *carousel)
 	dsmcc_timeout_set(carousel, DSMCC_TIMEOUT_DSI, 0, DEFAULT_DSI_TIMEOUT);
 
 	dsmcc_object_carousel_set_status(carousel, DSMCC_STATUS_DOWNLOADING);
+	dsmcc_filecache_notify_status(carousel, NULL);
 }
 
 void dsmcc_object_carousel_queue_remove(struct dsmcc_state *state, uint32_t queue_id)

@@ -296,38 +296,34 @@ static void update_carousel_completion(struct dsmcc_object_carousel *carousel, s
 	uint32_t downloaded, total;
 	int complete;
 
-	complete = carousel->dsi_transaction_id && carousel->dii_transaction_id;
-	downloaded = total = 0;
-	for (module = carousel->modules; module; module = module->next)
+	if (carousel->dsi_transaction_id && carousel->dii_transaction_id)
 	{
-		total += module->module_size;
-		switch (module->state)
+		complete = 1;
+		downloaded = total = 0;
+		for (module = carousel->modules; module; module = module->next)
 		{
-			case DSMCC_MODULE_STATE_PARTIAL:
-				downloaded += module->data.partial.downloaded_bytes;
-				complete = 0;
-				break;
-			case DSMCC_MODULE_STATE_COMPLETE:
-				downloaded += module->module_size;
-				break;
-			default:
-				complete = 0;
-				break;
+			total += module->module_size;
+			switch (module->state)
+			{
+				case DSMCC_MODULE_STATE_PARTIAL:
+					downloaded += module->data.partial.downloaded_bytes;
+					complete = 0;
+					break;
+				case DSMCC_MODULE_STATE_COMPLETE:
+					downloaded += module->module_size;
+					break;
+				default:
+					complete = 0;
+					break;
+			}
 		}
-	}
 
-	if (complete)
-		dsmcc_object_carousel_set_status(carousel, DSMCC_STATUS_DONE);
+		if (complete)
+			dsmcc_object_carousel_set_status(carousel, DSMCC_STATUS_DONE);
 
-	if (filecache)
-	{
-		dsmcc_filecache_notify_progression(filecache, downloaded, total);
+		dsmcc_filecache_notify_progression(carousel, filecache, downloaded, total);
 	}
-	else
-	{
-		for (filecache = carousel->filecaches; filecache; filecache = dsmcc_filecache_next(filecache))
-			dsmcc_filecache_notify_progression(filecache, downloaded, total);
-	}
+	dsmcc_filecache_notify_status(carousel, filecache);
 }
 
 void dsmcc_cache_init_new_filecache(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache)
