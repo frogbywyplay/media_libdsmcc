@@ -1,5 +1,12 @@
 libdsmcc changelog file.
-Last Modification Date: 06/02/2013
+Last Modification Date: 15/02/2013
+
+3.0.2 -- 15/02/2013
+- Fixed loading of state file.
+- Removed unneeded mutex_lock
+- Added missing state to debug logger
+- Fixed missing state change notifications
+- Fixed restart of carousel when its cached status is TIMEDOUT
 
 3.0.1 -- 06/02/2013
 - Fixed link_file function (wrong size given to dsmcc_file_link function)
