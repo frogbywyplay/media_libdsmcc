@@ -32,6 +32,6 @@ void dsmcc_cache_save_module_data(struct dsmcc_object_carousel *carousel, struct
 void dsmcc_cache_init_new_filecache(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache);
 void dsmcc_cache_free_all_modules(struct dsmcc_object_carousel *carousel, bool keep_cache);
 bool dsmcc_cache_load_modules(FILE *file, struct dsmcc_object_carousel *carousel);
-void dsmcc_cache_save_modules(FILE *file, struct dsmcc_object_carousel *carousel);
+bool dsmcc_cache_save_modules(FILE *file, struct dsmcc_object_carousel *carousel);
 
 #endif /* DSMCC_CACHE_MODULE_H */

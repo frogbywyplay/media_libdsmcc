@@ -173,26 +173,26 @@ bool dsmcc_object_carousel_load_all(FILE *f, struct dsmcc_state *state)
 	uint32_t tmp;
 	struct dsmcc_object_carousel *carousel = NULL, *lastcar = NULL;
 
-	if (!fread(&tmp, 1, sizeof(uint32_t), f))
+	if (!fread(&tmp, sizeof(uint32_t), 1, f))
 		goto error;
 	if (tmp != CAROUSEL_CACHE_FILE_MAGIC)
 		goto error;
 
 	while (1)
 	{
-		if (!fread(&tmp, 1, sizeof(uint32_t), f))
+		if (!fread(&tmp, sizeof(uint32_t), 1, f))
 			goto error;
 		if (tmp)
 			break;
 		carousel = calloc(1, sizeof(struct dsmcc_object_carousel));
 		carousel->state = state;
-		if (!fread(&carousel->cid, 1, sizeof(uint32_t), f))
+		if (!fread(&carousel->cid, sizeof(uint32_t), 1, f))
 			goto error;
-		if (!fread(&carousel->status, 1, sizeof(int), f))
+		if (!fread(&carousel->status, sizeof(int), 1, f))
 			goto error;
-		if (!fread(&carousel->requested_pid, 1, sizeof(uint16_t), f))
+		if (!fread(&carousel->requested_pid, sizeof(uint16_t), 1, f))
 			goto error;
-		if (!fread(&carousel->requested_transaction_id, 1, sizeof(uint32_t), f))
+		if (!fread(&carousel->requested_transaction_id, sizeof(uint32_t), 1, f))
 			goto error;
 		if (!dsmcc_cache_load_modules(f, carousel))
 			goto error;
@@ -214,28 +214,39 @@ error:
 	return 0;
 }
 
-void dsmcc_object_carousel_save_all(FILE *f, struct dsmcc_state *state)
+bool dsmcc_object_carousel_save_all(FILE *f, struct dsmcc_state *state)
 {
 	uint32_t tmp;
 	struct dsmcc_object_carousel *carousel;
 
 	tmp = CAROUSEL_CACHE_FILE_MAGIC;
-	fwrite(&tmp, 1, sizeof(uint32_t), f);
+	fwrite(&tmp, sizeof(uint32_t), 1, f);
 
 	carousel = state->carousels;
 	while (carousel)
 	{
 		tmp = 0;
-		fwrite(&tmp, 1, sizeof(uint32_t), f);
-		fwrite(&carousel->cid, 1, sizeof(uint32_t), f);
-		fwrite(&carousel->status, 1, sizeof(int), f);
-		fwrite(&carousel->requested_pid, 1, sizeof(uint16_t), f);
-		fwrite(&carousel->requested_transaction_id, 1, sizeof(uint32_t), f);
+		if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+			goto error;
+		if (!fwrite(&carousel->cid, sizeof(uint32_t), 1, f))
+			goto error;
+		if (!fwrite(&carousel->status, sizeof(int), 1, f))
+			goto error;
+		if (!fwrite(&carousel->requested_pid, sizeof(uint16_t), 1, f))
+			goto error;
+		if (!fwrite(&carousel->requested_transaction_id, sizeof(uint32_t), 1, f))
+			goto error;
 
-		dsmcc_cache_save_modules(f, carousel);
+		if (!dsmcc_cache_save_modules(f, carousel))
+			goto error;
 
 		carousel = carousel->next;
 	}
 	tmp = 1;
-	fwrite(&tmp, 1, sizeof(uint32_t), f);
+	if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+		goto error;
+
+	return 1;
+error:
+	return 0;
 }

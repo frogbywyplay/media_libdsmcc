@@ -595,26 +595,26 @@ static bool load_dentries(FILE *f, struct dsmcc_module_dentry **gateway, struct 
 
 	while (1)
 	{
-		if (!fread(&tmp, 1, sizeof(uint32_t), f))
+		if (!fread(&tmp, sizeof(uint32_t), 1, f))
 			return 0;
 		if (tmp)
 			break;
-		if (!fread(&isgateway, 1, sizeof(uint32_t), f))
+		if (!fread(&isgateway, sizeof(uint32_t), 1, f))
 			return 0;
-		if (!fread(&dir, 1, sizeof(bool), f))
+		if (!fread(&dir, sizeof(bool), 1, f))
 			return 0;
-		if (!fread(&id.module_id, 1, sizeof(uint16_t), f))
+		if (!fread(&id.module_id, sizeof(uint16_t), 1, f))
 			return 0;
-		if (!fread(&id.key, 1, sizeof(uint32_t), f))
+		if (!fread(&id.key, sizeof(uint32_t), 1, f))
 			return 0;
-		if (!fread(&id.key_mask, 1, sizeof(uint32_t), f))
+		if (!fread(&id.key_mask, sizeof(uint32_t), 1, f))
 			return 0;
-		if (!fread(&tmp, 1, sizeof(uint32_t), f))
+		if (!fread(&tmp, sizeof(uint32_t), 1, f))
 			return 0;
 		if (tmp)
 		{
 			name = malloc(tmp);
-			if (!fread(name, 1, tmp, f))
+			if (!fread(name, tmp, 1, f))
 			{
 				free(name);
 				return 0;
@@ -632,15 +632,15 @@ static bool load_dentries(FILE *f, struct dsmcc_module_dentry **gateway, struct 
 		}
 		else
 		{
-			if (!fread(&tmp, 1, sizeof(uint32_t), f))
+			if (!fread(&tmp, sizeof(uint32_t), 1, f))
 				return 0;
 			if (tmp)
 			{
 				dentry->data_file = malloc(tmp);
-				if (!fread(dentry->data_file, 1, tmp, f))
+				if (!fread(dentry->data_file, tmp, 1, f))
 					return 0;
 			}
-			if (!fread(&dentry->data_size, 1, sizeof(uint32_t), f))
+			if (!fread(&dentry->data_size, sizeof(uint32_t), 1, f))
 				return 0;
 		}
 	}
@@ -655,46 +655,46 @@ bool dsmcc_cache_load_modules(FILE *f, struct dsmcc_object_carousel *carousel)
 
 	while (1)
 	{
-		if (!fread(&tmp, 1, sizeof(uint32_t), f))
+		if (!fread(&tmp, sizeof(uint32_t), 1, f))
 			goto error;
 		if (tmp)
 			break;
 		module = calloc(1, sizeof(struct dsmcc_module));
 		module->state = DSMCC_MODULE_STATE_INVALID;
-		if (!fread(&module->id.download_id, 1, sizeof(uint32_t), f))
+		if (!fread(&module->id.download_id, sizeof(uint32_t), 1, f))
 			goto error;
-		if (!fread(&module->id.module_id, 1, sizeof(uint16_t), f))
+		if (!fread(&module->id.module_id, sizeof(uint16_t), 1, f))
 			goto error;
-		if (!fread(&module->id.module_version, 1, sizeof(uint8_t), f))
+		if (!fread(&module->id.module_version, sizeof(uint8_t), 1, f))
 			goto error;
-		if (!fread(&module->state, 1, sizeof(int), f))
+		if (!fread(&module->state, sizeof(int), 1, f))
 			goto error;
-		if (!fread(&module->module_size, 1, sizeof(uint32_t), f))
+		if (!fread(&module->module_size, sizeof(uint32_t), 1, f))
 			goto error;
 		switch (module->state)
 		{
 			case DSMCC_MODULE_STATE_PARTIAL:
-				if (!fread(&module->data.partial.block_size, 1, sizeof(uint32_t), f))
+				if (!fread(&module->data.partial.block_size, sizeof(uint32_t), 1, f))
 					goto error;
-				if (!fread(&module->data.partial.compressed, 1, sizeof(bool), f))
+				if (!fread(&module->data.partial.compressed, sizeof(bool), 1, f))
 					goto error;
-				if (!fread(&module->data.partial.compress_method, 1, sizeof(uint8_t), f))
+				if (!fread(&module->data.partial.compress_method, sizeof(uint8_t), 1, f))
 					goto error;
-				if (!fread(&module->data.partial.uncompressed_size, 1, sizeof(uint32_t), f))
+				if (!fread(&module->data.partial.uncompressed_size, sizeof(uint32_t), 1, f))
 					goto error;
-				if (!fread(&tmp, 1, sizeof(uint32_t), f))
+				if (!fread(&tmp, sizeof(uint32_t), 1, f))
 					goto error;
 				module->data.partial.data_file = malloc(tmp);
-				if (!fread(module->data.partial.data_file, 1, tmp, f))
+				if (!fread(module->data.partial.data_file, tmp, 1, f))
 					goto error;
-				if (!fread(&module->data.partial.block_count, 1, sizeof(uint32_t), f))
+				if (!fread(&module->data.partial.block_count, sizeof(uint32_t), 1, f))
 					goto error;
-				if (!fread(&module->data.partial.blockmap_size, 1, sizeof(uint32_t), f))
+				if (!fread(&module->data.partial.blockmap_size, sizeof(uint32_t), 1, f))
 					goto error;
 				module->data.partial.blockmap = malloc(module->data.partial.blockmap_size);
-				if (!fread(module->data.partial.blockmap, 1, module->data.partial.blockmap_size, f))
+				if (!fread(module->data.partial.blockmap, module->data.partial.blockmap_size, 1, f))
 					goto error;
-				if (!fread(&module->data.partial.downloaded_bytes, 1, sizeof(uint32_t), f))
+				if (!fread(&module->data.partial.downloaded_bytes, sizeof(uint32_t), 1, f))
 					goto error;
 				break;
 			case DSMCC_MODULE_STATE_COMPLETE:
@@ -722,7 +722,7 @@ error:
 	return 0;
 }
 
-static void save_dentries(FILE *f, struct dsmcc_module_dentry_list *dentries, struct dsmcc_module_dentry *gateway)
+static bool save_dentries(FILE *f, struct dsmcc_module_dentry_list *dentries, struct dsmcc_module_dentry *gateway)
 {
 	uint32_t tmp;
 	struct dsmcc_module_dentry *dentry;
@@ -730,17 +730,27 @@ static void save_dentries(FILE *f, struct dsmcc_module_dentry_list *dentries, st
 	for (dentry = dentries->first; dentry; dentry = dentry->next)
 	{
 		tmp = 0;
-		fwrite(&tmp, 1, sizeof(uint32_t), f);
+		if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+			goto error;
 		tmp = dentry == gateway ? 1 : 0;
-		fwrite(&tmp, 1, sizeof(uint32_t), f);
-		fwrite(&dentry->dir, 1, sizeof(bool), f);
-		fwrite(&dentry->id.module_id, 1, sizeof(uint16_t), f);
-		fwrite(&dentry->id.key, 1, sizeof(uint32_t), f);
-		fwrite(&dentry->id.key_mask, 1, sizeof(uint32_t), f);
+		if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+			goto error;
+		if (!fwrite(&dentry->dir, sizeof(bool), 1, f))
+			goto error;
+		if (!fwrite(&dentry->id.module_id, sizeof(uint16_t), 1, f))
+			goto error;
+		if (!fwrite(&dentry->id.key, sizeof(uint32_t), 1, f))
+			goto error;
+		if (!fwrite(&dentry->id.key_mask, sizeof(uint32_t), 1, f))
+			goto error;
 		tmp = dentry->name ? strlen(dentry->name) + 1 : 0;
-		fwrite(&tmp, 1, sizeof(uint32_t), f);
+		if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+			goto error;
 		if (tmp)
-			fwrite(dentry->name, 1, tmp, f);
+		{
+			if (!fwrite(dentry->name, tmp, 1, f))
+				goto error;
+		}
 		if (dentry->dir)
 		{
 			save_dentries(f, &dentry->dentries, NULL);
@@ -748,17 +758,25 @@ static void save_dentries(FILE *f, struct dsmcc_module_dentry_list *dentries, st
 		else
 		{
 			tmp = dentry->data_file ? strlen(dentry->data_file) + 1 : 0;
-			fwrite(&tmp, 1, sizeof(uint32_t), f);
+			if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+				goto error;
 			if (tmp)
-				fwrite(dentry->data_file, 1, tmp, f);
-			fwrite(&dentry->data_size, 1, sizeof(uint32_t), f);
+				if (!fwrite(dentry->data_file, tmp, 1, f))
+					goto error;
+			if (!fwrite(&dentry->data_size, sizeof(uint32_t), 1, f))
+				goto error;
 		}
 	}
 	tmp = 1;
-	fwrite(&tmp, 1, sizeof(uint32_t), f);
+	if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+		goto error;
+
+	return 1;
+error:
+	return 0;
 }
 
-void dsmcc_cache_save_modules(FILE *f, struct dsmcc_object_carousel *carousel)
+bool dsmcc_cache_save_modules(FILE *f, struct dsmcc_object_carousel *carousel)
 {
 	struct dsmcc_module *module;
 	uint32_t tmp;
@@ -767,34 +785,56 @@ void dsmcc_cache_save_modules(FILE *f, struct dsmcc_object_carousel *carousel)
 	while (module)
 	{
 		tmp = 0;
-		fwrite(&tmp, 1, sizeof(uint32_t), f);
-		fwrite(&module->id.download_id, 1, sizeof(uint32_t), f);
-		fwrite(&module->id.module_id, 1, sizeof(uint16_t), f);
-		fwrite(&module->id.module_version, 1, sizeof(uint8_t), f);
-		fwrite(&module->state, 1, sizeof(int), f);
-		fwrite(&module->module_size, 1, sizeof(uint32_t), f);
+		if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+			goto error;
+		if (!fwrite(&module->id.download_id, sizeof(uint32_t), 1, f))
+			goto error;
+		if (!fwrite(&module->id.module_id, sizeof(uint16_t), 1, f))
+			goto error;
+		if (!fwrite(&module->id.module_version, sizeof(uint8_t), 1, f))
+			goto error;
+		if (!fwrite(&module->state, sizeof(int), 1, f))
+			goto error;
+		if (!fwrite(&module->module_size, sizeof(uint32_t), 1, f))
+			goto error;
 		switch (module->state)
 		{
 			case DSMCC_MODULE_STATE_PARTIAL:
-				fwrite(&module->data.partial.block_size, 1, sizeof(uint32_t), f);
-				fwrite(&module->data.partial.compressed, 1, sizeof(bool), f);
-				fwrite(&module->data.partial.compress_method, 1, sizeof(uint8_t), f);
-				fwrite(&module->data.partial.uncompressed_size, 1, sizeof(uint32_t), f);
+				if (!fwrite(&module->data.partial.block_size, sizeof(uint32_t), 1, f))
+					goto error;
+				if (!fwrite(&module->data.partial.compressed, sizeof(bool), 1, f))
+					goto error;
+				if (!fwrite(&module->data.partial.compress_method, sizeof(uint8_t), 1, f))
+					goto error;
+				if (!fwrite(&module->data.partial.uncompressed_size, sizeof(uint32_t), 1, f))
+					goto error;
 				tmp = strlen(module->data.partial.data_file) + 1;
-				fwrite(&tmp, 1, sizeof(uint32_t), f);
-				fwrite(module->data.partial.data_file, 1, tmp, f);
-				fwrite(&module->data.partial.block_count, 1, sizeof(uint32_t), f);
-				fwrite(&module->data.partial.blockmap_size, 1, sizeof(uint32_t), f);
-				fwrite(module->data.partial.blockmap, 1, module->data.partial.blockmap_size, f);
-				fwrite(&module->data.partial.downloaded_bytes, 1, sizeof(uint32_t), f);
+				if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+					goto error;
+				if (!fwrite(module->data.partial.data_file, tmp, 1, f))
+					goto error;
+				if (!fwrite(&module->data.partial.block_count, sizeof(uint32_t), 1, f))
+					goto error;
+				if (!fwrite(&module->data.partial.blockmap_size, sizeof(uint32_t), 1, f))
+					goto error;
+				if (!fwrite(module->data.partial.blockmap, module->data.partial.blockmap_size, 1, f))
+					goto error;
+				if (!fwrite(&module->data.partial.downloaded_bytes, sizeof(uint32_t), 1, f))
+					goto error;
 				break;
 			case DSMCC_MODULE_STATE_COMPLETE:
-				save_dentries(f, &module->data.complete.dentries, module->data.complete.gateway);
+				if (!save_dentries(f, &module->data.complete.dentries, module->data.complete.gateway))
+					goto error;
 				break;
 		}
 		module = module->next;
 	}
 	tmp = 1;
-	fwrite(&tmp, 1, sizeof(uint32_t), f);
+	if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+		goto error;
+
+	return 1;
+error:
+	return 0;
 }
 

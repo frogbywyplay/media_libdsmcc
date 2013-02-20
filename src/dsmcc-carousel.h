@@ -26,7 +26,7 @@ void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_i
 		const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
 void dsmcc_object_carousel_queue_remove(struct dsmcc_state *state, uint32_t queue_id);
 bool dsmcc_object_carousel_load_all(FILE *file, struct dsmcc_state *state);
-void dsmcc_object_carousel_save_all(FILE *file, struct dsmcc_state *state);
+bool dsmcc_object_carousel_save_all(FILE *file, struct dsmcc_state *state);
 void dsmcc_object_carousel_free(struct dsmcc_object_carousel *carousel, bool keep_cache);
 void dsmcc_object_carousel_free_all(struct dsmcc_state *state, bool keep_cache);
 void dsmcc_object_carousel_set_status(struct dsmcc_object_carousel *carousel, int newstatus);
