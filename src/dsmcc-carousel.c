@@ -220,7 +220,8 @@ bool dsmcc_object_carousel_save_all(FILE *f, struct dsmcc_state *state)
 	struct dsmcc_object_carousel *carousel;
 
 	tmp = CAROUSEL_CACHE_FILE_MAGIC;
-	fwrite(&tmp, sizeof(uint32_t), 1, f);
+	if (!fwrite(&tmp, sizeof(uint32_t), 1, f))
+		goto error;
 
 	carousel = state->carousels;
 	while (carousel)
