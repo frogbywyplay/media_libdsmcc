@@ -26,6 +26,13 @@ enum
 	DSMCC_LOG_ERROR
 };
 
+/** The diffent carousel type */
+enum
+{
+DSMCC_OBJECT_CAROUSEL,
+DSMCC_DATA_CAROUSEL
+};
+
 /** \brief Callback called by the logging code
   * \param severity the severity of the message
   * \param message the message to be logged
@@ -160,12 +167,18 @@ struct dsmcc_carousel_callbacks
 
 /** \brief Add a carousel to the list of carousels to be downloaded
   * \param state the library state
+  * \param DSMCC_DATA_CAROUSEL or DSMCC_OBJECT_CAROUSEL
   * \param pid the PID of the stream where the carousel DSI message is broadcasted
   * \param transaction_id the transaction ID of the carousel DSI message or 0xFFFFFFFF to use the first DSI message found on the stream
   * \param downloadpath the directory where the carousel files will be downloaded
   * \param callbacks the callback that will be called during/after carousel download
   * \return a carousel queue ID that will be used to remove the carousel
   */
+uint32_t dsmcc_queue_carousel2(struct dsmcc_state *state, int type, 
+		uint16_t pid, uint32_t transaction_id,	const char *downloadpath,
+		struct dsmcc_carousel_callbacks *callbacks);
+
+/** \brief deprecated API for compatibility */
 uint32_t dsmcc_queue_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id,
 		const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
 

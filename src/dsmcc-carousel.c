@@ -83,11 +83,10 @@ void dsmcc_object_carousel_queue_remove(struct dsmcc_state *state, uint32_t queu
 		stop_carousel(carousel);
 }
 
-void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_id, uint16_t pid, uint32_t transaction_id,
+void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_id, int type, uint16_t pid, uint32_t transaction_id,
 		const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
 {
 	struct dsmcc_object_carousel *carousel;
-
 	/* Check if carousel is already requested */
 	carousel = find_carousel_by_requested_pid(state, pid);
 	if (!carousel)
@@ -96,6 +95,7 @@ void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_i
 		carousel->state = state;
 		carousel->status = DSMCC_STATUS_PARTIAL;
 		carousel->next = state->carousels;
+		carousel->type = type;
 		carousel->requested_pid = pid;
 		carousel->requested_transaction_id = transaction_id;
 		state->carousels = carousel;

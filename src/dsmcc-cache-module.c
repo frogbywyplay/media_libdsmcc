@@ -254,6 +254,23 @@ static void add_file_dentry(struct dsmcc_module_complete *module_data, const cha
 	dentry->data_size = msg->data_length;
 }
 
+static void write_module(struct dsmcc_file_cache *filecache, struct dsmcc_module *module)
+{
+	char *filename;
+	if(module->state != DSMCC_MODULE_STATE_COMPLETE)
+		return;
+	
+	struct dsmcc_module_dentry *dentry = module->data.complete.dentries.first;
+	if(dentry)
+	{
+		if(asprintf(&filename, "%u-%u-%hu.bin", module->id.download_id, module->id.dii_transaction_id, module->id.module_id) < 0)
+			fprintf(stderr, "argh!\n");
+		dsmcc_filecache_write_file(filecache, filename, dentry->data_file, dentry->data_size);
+		free(filename);
+	}
+	
+}
+
 static void update_filecache(struct dsmcc_file_cache *filecache, struct dsmcc_module *module)
 {
 	struct dsmcc_module_dentry *dentry, *dentry2;
@@ -287,7 +304,12 @@ static void update_filecaches(struct dsmcc_object_carousel *carousel, struct dsm
 {
 	struct dsmcc_file_cache *filecache;
 	for (filecache = carousel->filecaches; filecache; filecache = dsmcc_filecache_next(filecache))
-		update_filecache(filecache, module);
+	{
+		if(carousel->type == DSMCC_OBJECT_CAROUSEL)
+			update_filecache(filecache, module);
+		else
+			write_module(filecache, module);
+	}
 }
 
 static void update_carousel_completion(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache)
@@ -343,6 +365,7 @@ static void process_module(struct dsmcc_object_carousel *carousel, struct dsmcc_
 	char *data_file;
 	uint32_t size;
 	struct biop_msg *messages, *msg;
+	struct biop_msg_file allmodfile;
 
 	if (module->state != DSMCC_MODULE_STATE_PARTIAL)
 		return;
@@ -369,12 +392,15 @@ static void process_module(struct dsmcc_object_carousel *carousel, struct dsmcc_
 		size = module->module_size;
 	}
 
-	ret = dsmcc_biop_msg_parse_data(&messages, &module->id, module->data.partial.data_file, size);
-	if (ret < 0)
+	if(carousel->type == DSMCC_OBJECT_CAROUSEL)
 	{
-		DSMCC_ERROR("Error while parsing module 0x%04hx", module->id.module_id);
-		free_module_data(module, 0);
-		return;
+		ret = dsmcc_biop_msg_parse_data(&messages, &module->id, module->data.partial.data_file, size);
+		if (ret < 0)
+		{
+			DSMCC_ERROR("Error while parsing module 0x%04hx", module->id.module_id);
+			free_module_data(module, 0);
+			return;
+		}
 	}
 
 	data_file = strdup(module->data.partial.data_file);
@@ -386,33 +412,51 @@ static void process_module(struct dsmcc_object_carousel *carousel, struct dsmcc_
 	dsmcc_timeout_remove(carousel, DSMCC_TIMEOUT_MODULE, module->id.module_id);
 	dsmcc_timeout_remove(carousel, DSMCC_TIMEOUT_NEXTBLOCK, module->id.module_id);
 
-	msg = messages;
-	while (msg)
+	if(carousel->type == DSMCC_OBJECT_CAROUSEL)
 	{
-		switch (msg->type)
+		msg = messages;
+		while (msg)
 		{
-			case BIOP_MSG_DIR:
-				add_dir_dentry(carousel, &module->data.complete, &msg->msg.dir);
-				break;
-			case BIOP_MSG_FILE:
-				add_file_dentry(&module->data.complete, data_file, &msg->msg.file);
-				break;
+			switch (msg->type)
+			{
+				case BIOP_MSG_DIR:
+					add_dir_dentry(carousel, &module->data.complete, &msg->msg.dir);
+					break;
+				case BIOP_MSG_FILE:
+					add_file_dentry(&module->data.complete, data_file, &msg->msg.file);
+					break;
+			}
+			msg = msg->next;
 		}
-		msg = msg->next;
+		dsmcc_biop_msg_free_all(messages);
 	}
-	dsmcc_biop_msg_free_all(messages);
-
+	else
+	{
+		allmodfile.id.module_id = module->id.module_id;
+		allmodfile.id.key = module->id.module_id;
+		allmodfile.id.key_mask = 0xFFFF;
+		allmodfile.data_file = data_file; //useless ?
+		allmodfile.data_offset = 0;
+		allmodfile.data_length = size;
+		add_file_dentry(&module->data.complete, data_file, &allmodfile);
+	}
+	
 	unlink(data_file);
 	free(data_file);
 }
 
-void dsmcc_cache_remove_unneeded_modules(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *modules_id, int number_modules)
+void dsmcc_cache_remove_unneeded_modules(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *modules_id, int number_modules, uint32_t dii_transaction_id)
 {
 	struct dsmcc_module *module, *next;
 	int i, ok;
 
 	for (module = carousel->modules; module; module = next)
 	{
+		if(module->id.dii_transaction_id != dii_transaction_id)
+		{
+			next = module->next;
+			continue; // skip this module, it's from another group
+		}
 		ok = 0;
 		for (i = 0; i < number_modules; i++)
 		{

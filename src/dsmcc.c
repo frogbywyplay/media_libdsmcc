@@ -136,7 +136,8 @@ void *dsmcc_thread_func(void *arg)
 				case DSMCC_ACTION_ADD_CAROUSEL:
 					DSMCC_DEBUG("Adding carousel to queue, PID 0x%04x queue_id %u",
 							action->add_carousel.pid, action->add_carousel.queue_id);
-					dsmcc_object_carousel_queue_add(state, action->add_carousel.queue_id, action->add_carousel.pid,
+					dsmcc_object_carousel_queue_add(state, action->add_carousel.queue_id,
+							action->add_carousel.type, action->add_carousel.pid,
 							action->add_carousel.transaction_id, action->add_carousel.downloadpath,
 							&action->add_carousel.callbacks);
 					free(action->add_carousel.downloadpath);
@@ -618,7 +619,7 @@ void dsmcc_add_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, i
 	buffer_action(state, action);
 }
 
-uint32_t dsmcc_queue_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
+uint32_t dsmcc_queue_carousel2(struct dsmcc_state *state, int type, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
 {
 	struct dsmcc_action *action;
 	uint32_t queue_id;
@@ -629,6 +630,7 @@ uint32_t dsmcc_queue_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t 
 
 	action = calloc(1, sizeof(struct dsmcc_action));
 	action->type = DSMCC_ACTION_ADD_CAROUSEL;
+	action->add_carousel.type = type;
 	action->add_carousel.queue_id = queue_id;
 	action->add_carousel.pid = pid;
 	action->add_carousel.transaction_id = transaction_id;
@@ -637,6 +639,11 @@ uint32_t dsmcc_queue_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t 
 	buffer_action(state, action);
 
 	return queue_id;
+}
+
+uint32_t dsmcc_queue_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
+{
+	return dsmcc_queue_carousel2(state, DSMCC_OBJECT_CAROUSEL, pid, transaction_id, downloadpath, callbacks);
 }
 
 void dsmcc_dequeue_carousel(struct dsmcc_state *state, uint32_t queue_id)

@@ -15,7 +15,8 @@ libdsmcc_la_SOURCES = \
 	dsmcc-section.c \
 	dsmcc-util.c \
 	dsmcc-cache-file.c \
-	dsmcc-carousel.c
+	dsmcc-carousel.c \
+	dsmcc-gii.c
 
 noinst_HEADERS = \
 	dsmcc-biop-ior.h \
@@ -26,6 +27,7 @@ noinst_HEADERS = \
 	dsmcc-cache-file.h \
 	dsmcc-cache-module.h \
 	dsmcc-carousel.h \
+	dsmcc-gii.h \
 	dsmcc-config.h \
 	dsmcc-compress.h \
 	dsmcc-debug.h \

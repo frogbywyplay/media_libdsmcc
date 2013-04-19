@@ -25,7 +25,10 @@ static inline bool dsmcc_getlong(uint32_t *dst, const uint8_t *data, int offset,
 	data += offset;
 	length -= offset;
 	if (length < 4)
+	{
+		DSMCC_ERROR("size error");
 		return 0;
+	}
 	*dst = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
 	return 1;
 }
@@ -35,7 +38,10 @@ static inline bool dsmcc_getshort(uint16_t *dst, const uint8_t *data, int offset
 	data += offset;
 	length -= offset;
 	if (length < 2)
+	{
+		DSMCC_ERROR("size error");
 		return 0;
+	}
 	*dst = (data[0] << 8) | data[1];
 	return 1;
 }
@@ -45,7 +51,10 @@ static inline bool dsmcc_getbyte(uint8_t *dst, const uint8_t *data, int offset, 
 	data += offset;
 	length -= offset;
 	if (length < 1)
+	{
+		DSMCC_ERROR("size error");
 		return 0;
+	}
 	*dst = data[0];
 	return 1;
 }

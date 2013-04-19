@@ -26,7 +26,7 @@ struct dsmcc_module_info
 
 struct dsmcc_module;
 
-void dsmcc_cache_remove_unneeded_modules(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *modules_id, int number_modules);
+void dsmcc_cache_remove_unneeded_modules(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *modules_id, int number_modules, uint32_t dii_transaction_id);
 bool dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *module_id, struct dsmcc_module_info *module_info);
 void dsmcc_cache_save_module_data(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *module_id, uint16_t block_number, uint8_t *data, int length);
 void dsmcc_cache_init_new_filecache(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache);
