@@ -13,6 +13,7 @@
 #include "dsmcc-util.h"
 #include "dsmcc-compress.h"
 #include "dsmcc-biop-message.h"
+#include "dsmcc-gii.h"
 
 /* list of directory entries */
 struct dsmcc_module_dentry_list
@@ -92,7 +93,7 @@ struct dsmcc_module
 static void free_dentries(struct dsmcc_module_dentry_list *list, bool keep_cache)
 {
 	struct dsmcc_module_dentry *dentry, *next;
-	
+
 	dentry = list->first;
 	while (dentry)
 	{
@@ -259,7 +260,7 @@ static void write_module(struct dsmcc_file_cache *filecache, struct dsmcc_module
 	char *filename;
 	if(module->state != DSMCC_MODULE_STATE_COMPLETE)
 		return;
-	
+
 	struct dsmcc_module_dentry *dentry = module->data.complete.dentries.first;
 	if(dentry)
 	{
@@ -268,7 +269,7 @@ static void write_module(struct dsmcc_file_cache *filecache, struct dsmcc_module
 		dsmcc_filecache_write_file(filecache, filename, dentry->data_file, dentry->data_size);
 		free(filename);
 	}
-	
+
 }
 
 static void update_filecache(struct dsmcc_file_cache *filecache, struct dsmcc_module *module)
@@ -318,7 +319,7 @@ static void update_carousel_completion(struct dsmcc_object_carousel *carousel, s
 	uint32_t downloaded, total;
 	int complete;
 
-	if (carousel->dsi_transaction_id && carousel->dii_transaction_id)
+	if (carousel->dsi_transaction_id && (carousel->type == DSMCC_OBJECT_CAROUSEL ? carousel->dii_transaction_id : (unsigned)carousel->group_list))
 	{
 		complete = 1;
 		downloaded = total = 0;
@@ -440,23 +441,18 @@ static void process_module(struct dsmcc_object_carousel *carousel, struct dsmcc_
 		allmodfile.data_length = size;
 		add_file_dentry(&module->data.complete, data_file, &allmodfile);
 	}
-	
+
 	unlink(data_file);
 	free(data_file);
 }
 
-void dsmcc_cache_remove_unneeded_modules(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *modules_id, int number_modules, uint32_t dii_transaction_id)
+void dsmcc_cache_remove_unneeded_modules(struct dsmcc_object_carousel *carousel, struct dsmcc_module_id *modules_id, int number_modules)
 {
 	struct dsmcc_module *module, *next;
 	int i, ok;
 
 	for (module = carousel->modules; module; module = next)
 	{
-		if(module->id.dii_transaction_id != dii_transaction_id)
-		{
-			next = module->next;
-			continue; // skip this module, it's from another group
-		}
 		ok = 0;
 		for (i = 0; i < number_modules; i++)
 		{
@@ -465,6 +461,33 @@ void dsmcc_cache_remove_unneeded_modules(struct dsmcc_object_carousel *carousel,
 				ok = 1;
 				break;
 			}
+		}
+		next = module->next;
+		if (!ok)
+		{
+			DSMCC_DEBUG("Removing Module 0x%04hx Version 0x%02hhx", module->id.module_id, module->id.module_version);
+			free_module(carousel, module, 0);
+		}
+	}
+}
+
+void dsmcc_cache_remove_unneeded_modules_by_group(struct dsmcc_object_carousel *carousel, struct dsmcc_group_list *groups)
+{
+	struct dsmcc_module *module, *next;
+	struct dsmcc_group_list *grp;
+	int ok;
+
+	for (module = carousel->modules; module; module = next)
+	{
+		ok = 0;
+		for (grp = groups; grp; grp = grp->next)
+		{
+			if (module->id.dii_transaction_id == grp->id)
+			{
+				ok = 1;
+				break;
+			}
+
 		}
 		next = module->next;
 		if (!ok)

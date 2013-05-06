@@ -6,6 +6,8 @@
 #include <sys/types.h>
 #include <sys/time.h>
 
+#include "dsmcc.h"
+
 uint32_t dsmcc_crc32(uint8_t *data, uint32_t len);
 
 bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int length);

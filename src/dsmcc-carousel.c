@@ -96,6 +96,7 @@ void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_i
 		carousel->status = DSMCC_STATUS_PARTIAL;
 		carousel->next = state->carousels;
 		carousel->type = type;
+		carousel->group_list = NULL;
 		carousel->requested_pid = pid;
 		carousel->requested_transaction_id = transaction_id;
 		state->carousels = carousel;
@@ -186,7 +187,10 @@ bool dsmcc_object_carousel_load_all(FILE *f, struct dsmcc_state *state)
 			break;
 		carousel = calloc(1, sizeof(struct dsmcc_object_carousel));
 		carousel->state = state;
+		carousel->group_list = NULL;
 		if (!fread(&carousel->cid, sizeof(uint32_t), 1, f))
+			goto error;
+		if (!fread(&carousel->type, sizeof(int), 1, f))
 			goto error;
 		if (!fread(&carousel->status, sizeof(int), 1, f))
 			goto error;
@@ -231,6 +235,8 @@ bool dsmcc_object_carousel_save_all(FILE *f, struct dsmcc_state *state)
 			goto error;
 		if (!fwrite(&carousel->cid, sizeof(uint32_t), 1, f))
 			goto error;
+		if (!fwrite(&carousel->type, sizeof(int), 1, f))
+			goto error;
 		if (!fwrite(&carousel->status, sizeof(int), 1, f))
 			goto error;
 		if (!fwrite(&carousel->requested_pid, sizeof(uint16_t), 1, f))
@@ -251,3 +257,4 @@ bool dsmcc_object_carousel_save_all(FILE *f, struct dsmcc_state *state)
 error:
 	return 0;
 }
+
