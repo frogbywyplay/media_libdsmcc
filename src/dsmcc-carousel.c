@@ -201,6 +201,8 @@ bool dsmcc_object_carousel_load_all(FILE *f, struct dsmcc_state *state)
 		if (!dsmcc_cache_load_modules(f, carousel))
 			goto error;
 
+		if (carousel->status == DSMCC_STATUS_DOWNLOADING)
+			carousel->status = DSMCC_STATUS_PARTIAL;
 		if (state->carousels)
 			lastcar->next = carousel;
 		else
