@@ -250,9 +250,9 @@ int main(int argc, char **argv)
 		{
 			struct timeval now;
 			struct timespec ts;
-			fprintf(stderr, "Waiting 10s for carousel completion...\n");
+			fprintf(stderr, "Waiting 60s for carousel completion...\n");
 			gettimeofday(&now, NULL);
-			ts.tv_sec = now.tv_sec + 10;
+			ts.tv_sec = now.tv_sec + 60;
 			ts.tv_nsec = now.tv_usec * 1000;
 			if (pthread_cond_timedwait(&g_cond, &g_mutex, &ts) == ETIMEDOUT)
 				fprintf(stderr, "Time out!\n");
