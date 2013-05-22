@@ -284,10 +284,47 @@ static struct dsmcc_cached_dir *find_dir_in_subdirs(struct dsmcc_cached_dir *par
 	return NULL;
 }
 
-static void link_file(struct dsmcc_file_cache *filecache, struct dsmcc_cached_file *file)
+int dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, const char *file_path, const char *data_file, int data_size)
 {
 	char *fn;
+	int written = 0;
+	
+	fn = malloc(strlen(filecache->downloadpath) + strlen(file_path) + 2);
+	sprintf(fn, "%s%s%s", filecache->downloadpath, file_path[0] == '/' ? "" : "/", file_path);
 
+	if (filecache->callbacks.dentry_check)
+	{
+		DSMCC_DEBUG("Filecache calling callback dentry_check(%u, 0x%08x, 0, '%s', '%s')",
+				filecache->queue_id, filecache->carousel->cid, file_path, fn);
+		if (!(*filecache->callbacks.dentry_check)(filecache->callbacks.dentry_check_arg,
+				filecache->queue_id, filecache->carousel->cid, 0, file_path, fn))
+		{
+			DSMCC_DEBUG("Skipping file %s as requested", file_path);
+			goto cleanup;
+		}
+	}
+
+	DSMCC_DEBUG("Linking data from %s to %s", data_file, fn);
+	if (dsmcc_file_link(fn, data_file, data_size))
+	{
+		written = 1;
+
+		if (filecache->callbacks.dentry_saved)
+		{
+			DSMCC_DEBUG("Filecache calling callback dentry_saved(%u, 0x%08x, 0, '%s', '%s')",
+					filecache->queue_id, filecache->carousel->cid, file_path, fn);
+			(*filecache->callbacks.dentry_saved)(filecache->callbacks.dentry_saved_arg,
+					filecache->queue_id, filecache->carousel->cid, 0, file_path, fn);
+		}
+	}
+
+cleanup:
+	free(fn);
+	return written;
+}
+
+static void link_file(struct dsmcc_file_cache *filecache, struct dsmcc_cached_file *file)
+{
 	/* Skip already written files or files for which data has not yet arrived */
 	if (file->written || !file->data_file)
 		return;
@@ -297,37 +334,8 @@ static void link_file(struct dsmcc_file_cache *filecache, struct dsmcc_cached_fi
 	file->path = malloc(strlen(file->parent->path) + strlen(file->name) + 2);
 	sprintf(file->path, "%s/%s", file->parent->path, file->name);
 
-	fn = malloc(strlen(filecache->downloadpath) + strlen(file->path) + 2);
-	sprintf(fn, "%s%s%s", filecache->downloadpath, file->path[0] == '/' ? "" : "/", file->path);
+	file->written = dsmcc_filecache_write_file(filecache, file->path, file->data_file, file->data_size);
 
-	if (filecache->callbacks.dentry_check)
-	{
-		DSMCC_DEBUG("Filecache calling callback dentry_check(%u, 0x%08x, 0, '%s', '%s')",
-				filecache->queue_id, filecache->carousel->cid, file->path, fn);
-		if (!(*filecache->callbacks.dentry_check)(filecache->callbacks.dentry_check_arg,
-				filecache->queue_id, filecache->carousel->cid, 0, file->path, fn))
-		{
-			DSMCC_DEBUG("Skipping file %s as requested", file->path);
-			goto cleanup;
-		}
-	}
-
-	DSMCC_DEBUG("Linking data from %s to %s", file->data_file, fn);
-	if (dsmcc_file_link(fn, file->data_file, file->data_size))
-	{
-		file->written = 1;
-
-		if (filecache->callbacks.dentry_saved)
-		{
-			DSMCC_DEBUG("Filecache calling callback dentry_saved(%u, 0x%08x, 0, '%s', '%s')",
-					filecache->queue_id, filecache->carousel->cid, file->path, fn);
-			(*filecache->callbacks.dentry_saved)(filecache->callbacks.dentry_saved_arg,
-					filecache->queue_id, filecache->carousel->cid, 0, file->path, fn);
-		}
-	}
-
-cleanup:
-	free(fn);
 }
 
 static void write_dir(struct dsmcc_file_cache *filecache, struct dsmcc_cached_dir *dir)

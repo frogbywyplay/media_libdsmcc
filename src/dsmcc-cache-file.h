@@ -26,4 +26,7 @@ void dsmcc_filecache_cache_data(struct dsmcc_file_cache *filecache, struct dsmcc
 void dsmcc_filecache_notify_progression(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache, uint32_t downloaded, uint32_t total);
 void dsmcc_filecache_notify_status(struct dsmcc_object_carousel *carousel, struct dsmcc_file_cache *filecache);
 
+/* /!\ skip cache and write a file directly */
+int dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, const char *file_path, const char *data_file, int data_size);
+
 #endif /* DSMCC_CACHE_FILE_H */

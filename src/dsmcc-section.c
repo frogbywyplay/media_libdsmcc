@@ -19,6 +19,7 @@
 #include "dsmcc-cache-file.h"
 #include "dsmcc-util.h"
 #include "dsmcc-carousel.h"
+#include "dsmcc-gii.h"
 
 struct dsmcc_section_header
 {
@@ -202,7 +203,7 @@ static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *da
         int off = 0, ret;
 	uint16_t i, dsi_data_length;
 	struct biop_ior gateway_ior;
-	struct dsmcc_stream *stream;
+	struct dsmcc_stream *stream = NULL;
 
 	/* skip unused Server ID */
 	/* 0-19 Server id = 20 * 0xFF */
@@ -223,43 +224,70 @@ static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *da
 	off += 2;
 	DSMCC_DEBUG("DSI: Data Length %hu", dsi_data_length);
 
-	DSMCC_DEBUG("DSI: Processing BIOP::ServiceGatewayInfo...");
-	memset(&gateway_ior, 0, sizeof(struct biop_ior));
-	ret = parse_service_gateway_info(&gateway_ior, data + off, dsmcc_min(data_length - off, dsi_data_length));
-	if (ret < 0)
-		return -1;
-	off += dsi_data_length;
-
-	/* Check if carousel was updated */
-	if (carousel->dsi_transaction_id)
+	if(carousel->type == DSMCC_OBJECT_CAROUSEL)
 	{
-		if (carousel->cid != gateway_ior.profile_body.obj_loc.carousel_id)
-		{
-			DSMCC_ERROR("DSI: Ignoring gateway info, wrong carousel ID (got 0x%x but expected 0x%x)", gateway_ior.profile_body.obj_loc.carousel_id, carousel->cid);
+		DSMCC_DEBUG("DSI: Processing BIOP::ServiceGatewayInfo...");
+		memset(&gateway_ior, 0, sizeof(struct biop_ior));
+		ret = parse_service_gateway_info(&gateway_ior, data + off, dsmcc_min(data_length - off, dsi_data_length));
+		if (ret < 0)
 			return -1;
+		off += dsi_data_length;
+
+		/* Check if carousel was updated */
+		if (carousel->dsi_transaction_id)
+		{
+			if (carousel->cid != gateway_ior.profile_body.obj_loc.carousel_id)
+			{
+				DSMCC_ERROR("DSI: Ignoring gateway info, wrong carousel ID (got 0x%x but expected 0x%x)", gateway_ior.profile_body.obj_loc.carousel_id, carousel->cid);
+				return -1;
+			}
+
+			dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DII);
+		}
+		else
+		{
+			/* Set carousel ID and DSI Transaction ID */
+			carousel->cid = gateway_ior.profile_body.obj_loc.carousel_id;
 		}
 
-		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DII);
+		/* Queue entry for DII */
+		stream = dsmcc_stream_queue_add(carousel,
+				DSMCC_STREAM_SELECTOR_ASSOC_TAG, gateway_ior.profile_body.conn_binder.assoc_tag,
+				DSMCC_QUEUE_ENTRY_DII, gateway_ior.profile_body.conn_binder.transaction_id);
+
 	}
-	else
+	else // DSMCC_DATA_CAROUSEL
 	{
-		/* Set carousel ID and DSI Transaction ID */
-		carousel->cid = gateway_ior.profile_body.obj_loc.carousel_id;
+		struct dsmcc_group_list *groups, *pg;
+		ret = dsmcc_group_info_indication_parse(&groups, data + off, dsmcc_min(data_length - off, dsi_data_length));
+		if(ret < 0)
+			return -1;
+
+		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DII);
+		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
+
+		pg = groups;
+		while(pg)
+		{
+			DSMCC_DEBUG("datacarousel: add group %d\n",pg->id);
+			stream = dsmcc_stream_queue_add(carousel, DSMCC_STREAM_SELECTOR_PID, carousel->requested_pid, DSMCC_QUEUE_ENTRY_DII, pg->id);
+			pg = pg->next;
+		}
+		dsmcc_cache_remove_unneeded_modules_by_group(carousel, groups);
+		dsmcc_group_info_indication_free(carousel->group_list);
+		carousel->group_list = groups;
+		off += dsi_data_length;
 	}
 
-	/* Queue entry for DII */
-	stream = dsmcc_stream_queue_add(carousel,
-			DSMCC_STREAM_SELECTOR_ASSOC_TAG, gateway_ior.profile_body.conn_binder.assoc_tag,
-			DSMCC_QUEUE_ENTRY_DII, gateway_ior.profile_body.conn_binder.transaction_id);
+
 	/* add section filter on stream for DII (table_id == 0x3B, table_id_extension != 0x0000 or 0x0001) */
-	if (carousel->state->callbacks.add_section_filter)
+	if (carousel->state->callbacks.add_section_filter && stream)
 	{
 		uint8_t pattern[3]  = { 0x3B, 0x00, 0x00 };
 		uint8_t equal[3]    = { 0xff, 0x00, 0x00 };
 		uint8_t notequal[3] = { 0x00, 0xff, 0xfe };
 		(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg, stream->pid, pattern, equal, notequal, 3);
 	}
-
 	/* update timeouts */
 	dsmcc_timeout_remove(carousel, DSMCC_TIMEOUT_DSI, 0);
 	dsmcc_timeout_set(carousel, DSMCC_TIMEOUT_DII, 0, gateway_ior.profile_body.conn_binder.timeout);
@@ -270,7 +298,7 @@ static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *da
 /*
  * ETSI TR 101 202 Table A.4
  */
-static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *data, int data_length)
+static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *data, int data_length, uint32_t dii_transaction_id)
 {
 	int off = 0, ret;
 	uint16_t i, number_modules;
@@ -294,15 +322,10 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 	/* skip unused fields */
 	off += 10;
 
-	/* compatibility descriptor length, should be 0 */
+	/* ignore compatibility descriptor */
 	if (!dsmcc_getshort(&i, data, off, data_length))
 		return -1;
-	off += 2;
-	if (i != 0)
-	{
-		DSMCC_ERROR("DII: Compatibility descriptor should be 0 but is %hu", i);
-		return -1;
-	}
+	off += 2 + i;
 
 	if (!dsmcc_getshort(&number_modules, data, off, data_length))
 		return -1;
@@ -319,6 +342,7 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 		uint8_t module_info_length;
 
 		modules_id[i].download_id = download_id;
+		modules_id[i].dii_transaction_id = dii_transaction_id;
 		modules_info[i].block_size = block_size;
 
 		if (!dsmcc_getshort(&modules_id[i].module_id, data, off, data_length))
@@ -336,27 +360,39 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 
 		DSMCC_DEBUG("DII: Module ID 0x%04hx Size %u Version 0x%02hhx", modules_id[i].module_id, modules_info[i].module_size, modules_id[i].module_version);
 
-		bmi = malloc(sizeof(struct biop_module_info));
-		ret = dsmcc_biop_parse_module_info(bmi, data + off, dsmcc_min(data_length - off, module_info_length));
-		if (ret < 0)
+		if(carousel->type == DSMCC_OBJECT_CAROUSEL)
 		{
+			bmi = malloc(sizeof(struct biop_module_info));
+			ret = dsmcc_biop_parse_module_info(bmi, data + off, dsmcc_min(data_length - off, module_info_length));
+			if (ret < 0)
+			{
+				dsmcc_biop_free_module_info(bmi);
+				goto error;
+			}
+			off += module_info_length;
+
+			modules_info[i].mod_timeout = bmi->mod_timeout;
+			modules_info[i].block_timeout = bmi->block_timeout;
+
+			assoc_tags[i] = bmi->assoc_tag;
+			desc = dsmcc_find_descriptor_by_type(bmi->descriptors, DSMCC_DESCRIPTOR_COMPRESSED);
+			if (desc)
+			{
+				modules_info[i].compressed = 1;
+				modules_info[i].compress_method = desc->data.compressed.method;
+				modules_info[i].uncompressed_size = desc->data.compressed.original_size;
+			}
 			dsmcc_biop_free_module_info(bmi);
-			goto error;
 		}
-		off += module_info_length;
-
-		modules_info[i].mod_timeout = bmi->mod_timeout;
-		modules_info[i].block_timeout = bmi->block_timeout;
-
-		assoc_tags[i] = bmi->assoc_tag;
-		desc = dsmcc_find_descriptor_by_type(bmi->descriptors, DSMCC_DESCRIPTOR_COMPRESSED);
-		if (desc)
+		else
 		{
-			modules_info[i].compressed = 1;
-			modules_info[i].compress_method = desc->data.compressed.method;
-			modules_info[i].uncompressed_size = desc->data.compressed.original_size;
+			if(module_info_length)
+				DSMCC_WARN("skiping module info");
+			off += module_info_length;
+			modules_info[i].mod_timeout = 0xFFFFFFFF;
+			modules_info[i].block_timeout = 0xFFFFFFFF;
+
 		}
-		dsmcc_biop_free_module_info(bmi);
 
 	}
 
@@ -367,10 +403,13 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 	DSMCC_DEBUG("DII: Private Data Length %hhu", i);
 	off += i;
 
-	/* remove outdated modules and files */
-	dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
-	dsmcc_filecache_clear_all(carousel);
-	dsmcc_cache_remove_unneeded_modules(carousel, modules_id, number_modules);
+	if(carousel->type == DSMCC_OBJECT_CAROUSEL)
+	{
+		/* remove outdated modules and files */
+		dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
+		dsmcc_filecache_clear_all(carousel);
+		dsmcc_cache_remove_unneeded_modules(carousel, modules_id, number_modules);
+	}
 
 	/* add modules info to module cache */
 	total_size = 0;
@@ -382,9 +421,18 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 		if (!dsmcc_cache_add_module_info(carousel, &modules_id[i], &modules_info[i]))
 		{
 			/* Queue entry for DDBs */
-			stream = dsmcc_stream_queue_add(carousel,
-					DSMCC_STREAM_SELECTOR_ASSOC_TAG, assoc_tags[i],
-					DSMCC_QUEUE_ENTRY_DDB, download_id);
+			if(carousel->type == DSMCC_OBJECT_CAROUSEL)
+			{
+				stream = dsmcc_stream_queue_add(carousel,
+						DSMCC_STREAM_SELECTOR_ASSOC_TAG, assoc_tags[i],
+						DSMCC_QUEUE_ENTRY_DDB, download_id);
+			}
+			else
+			{
+				stream = dsmcc_stream_queue_add(carousel,
+						DSMCC_STREAM_SELECTOR_PID, carousel->requested_pid,
+						DSMCC_QUEUE_ENTRY_DDB, download_id);
+			}
 			/* add section filter on stream for DDB (table_id == 0x3C, table_id_extension == module_id, version_number == module_version % 32) */
 			if (carousel->state->callbacks.add_section_filter)
 			{
@@ -424,6 +472,7 @@ static int parse_section_control(struct dsmcc_stream *stream, uint8_t *data, int
 	struct dsmcc_message_header header;
 	int off = 0, ret;
 	struct dsmcc_object_carousel *carousel;
+	struct dsmcc_group_list *grp;
 
 	ret = parse_message_header(&header, data, data_length);
 	if (ret < 0)
@@ -455,15 +504,45 @@ static int parse_section_control(struct dsmcc_stream *stream, uint8_t *data, int
 			carousel = dsmcc_stream_queue_find(stream, DSMCC_QUEUE_ENTRY_DII, header.transaction_id);
 			if (carousel)
 			{
-				if (carousel->dii_transaction_id != header.transaction_id)
+				if(carousel->type == DSMCC_OBJECT_CAROUSEL)
 				{
-					ret = parse_section_dii(carousel, data + off, data_length - off);
-					if (ret < 0)
-						return -1;
-					carousel->dii_transaction_id = header.transaction_id;
+					if (carousel->dii_transaction_id != header.transaction_id)
+					{
+						ret = parse_section_dii(carousel, data + off, data_length - off, header.transaction_id);
+						if (ret < 0)
+							return -1;
+						carousel->dii_transaction_id = header.transaction_id;
+					}
+					else
+						DSMCC_DEBUG("Ignoring duplicate DII with Transaction ID 0x%x", header.transaction_id);
 				}
 				else
-					DSMCC_DEBUG("Ignoring duplicate DII with Transaction ID 0x%x", header.transaction_id);
+				{
+					for (grp = carousel->group_list; grp; grp = grp->next)
+					{
+						if (header.transaction_id == grp->id)
+						{
+							if(grp->parsed)
+							{
+								DSMCC_DEBUG("Ignoring duplicate DII with Transaction ID 0x%x", header.transaction_id);
+							}
+							else
+							{
+								ret = parse_section_dii(carousel, data + off, data_length - off, header.transaction_id);
+								if (ret < 0)
+									return -1;
+								grp->parsed = 1;
+							}
+
+							break;
+						}
+
+					}
+
+					if(!grp)
+						DSMCC_DEBUG("Can't find DII with Transaction ID 0x%x", header.transaction_id);
+
+				}
 			}
 			else
 				DSMCC_DEBUG("Skipping unrequested DII");
@@ -660,3 +739,4 @@ int dsmcc_parse_section(struct dsmcc_state *state, struct dsmcc_section *section
 
 	return 1;
 }
+

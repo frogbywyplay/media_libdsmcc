@@ -176,19 +176,41 @@ static int parse_stream(FILE *ts, struct dsmcc_state *state, struct dsmcc_tspars
 int main(int argc, char **argv)
 {
 	struct dsmcc_state *state;
-	int status = 0; 
+	int status = 0;
+	int carousel_type = DSMCC_OBJECT_CAROUSEL;
 	char *downloadpath;
 	FILE *ts;
 	uint16_t pid;
 	uint32_t qid;
+	int log_level = DSMCC_LOG_DEBUG;
 	struct dsmcc_tsparser_buffer *buffers = NULL;
 	struct dsmcc_dvb_callbacks dvb_callbacks;
 	struct dsmcc_carousel_callbacks car_callbacks;
 
 	if(argc < 4)
 	{
-		fprintf(stderr, "usage %s <file> <pid> <downloadpath>\n", argv[0]);
+		fprintf(stderr, "usage %s [-d] [-q] <file> <pid> <downloadpath>\n -q    almost quiet\n -d    data carousel\n", argv[0]);
 		return -1;
+	}
+
+	while(argc > 4)
+	{
+		if(!strcmp(argv[1], "-d"))
+		{
+			fprintf(stderr, "data carousel mode\n");
+			carousel_type = DSMCC_DATA_CAROUSEL;
+			argv++;
+			argc--;
+		}
+		else if(!strcmp(argv[1], "-q"))
+		{
+			fprintf(stderr, "almost quiet mode\n");
+			log_level = DSMCC_LOG_ERROR;
+			argv++;
+			argc--;
+		}
+		else
+			break; // assume options end
 	}
 
 	sscanf(argv[2], "%hu", &pid);
@@ -207,7 +229,7 @@ int main(int argc, char **argv)
 		pthread_mutex_init(&g_mutex, NULL);
 		pthread_cond_init(&g_cond, NULL);
 
-		dsmcc_set_logger(&logger, DSMCC_LOG_DEBUG);
+		dsmcc_set_logger(&logger, log_level);
 
 		dvb_callbacks.get_pid_for_assoc_tag = &get_pid_for_assoc_tag;
 		dvb_callbacks.add_section_filter = &add_section_filter;
@@ -219,7 +241,7 @@ int main(int argc, char **argv)
 		car_callbacks.dentry_saved = &dentry_saved;
 		car_callbacks.download_progression = &download_progression;
 		car_callbacks.carousel_status_changed = &carousel_status_changed;
-		qid = dsmcc_queue_carousel(state, pid, 0, downloadpath, &car_callbacks);
+		qid = dsmcc_queue_carousel2(state, carousel_type, pid, 0, downloadpath, &car_callbacks);
 
 		status = parse_stream(ts, state, &buffers);
 
@@ -228,9 +250,9 @@ int main(int argc, char **argv)
 		{
 			struct timeval now;
 			struct timespec ts;
-			fprintf(stderr, "Waiting 10s for carousel completion...\n");
+			fprintf(stderr, "Waiting 60s for carousel completion...\n");
 			gettimeofday(&now, NULL);
-			ts.tv_sec = now.tv_sec + 10;
+			ts.tv_sec = now.tv_sec + 60;
 			ts.tv_nsec = now.tv_usec * 1000;
 			if (pthread_cond_timedwait(&g_cond, &g_mutex, &ts) == ETIMEDOUT)
 				fprintf(stderr, "Time out!\n");
