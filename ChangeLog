@@ -2,6 +2,7 @@ libdsmcc changelog file.
 Last Modification Date: 20/02/2013
 
 3.1.0 -- 23/05/2013
+- Do not load cache state file when 'keep_cache' option is disabled.
 - Add datacarousel support
 
 3.0.3 -- 20/02/2013
