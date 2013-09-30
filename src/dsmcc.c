@@ -245,7 +245,8 @@ struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsm
 	state->cachefile = malloc(strlen(state->cachedir) + 7);
 	sprintf(state->cachefile, "%s/state", state->cachedir);
 
-	load_state(state);
+    if (keep_cache)
+	    load_state(state);
 
 	pthread_mutex_init(&state->mutex, NULL);
 	pthread_cond_init(&state->cond, NULL);
