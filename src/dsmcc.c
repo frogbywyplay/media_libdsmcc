@@ -320,7 +320,14 @@ static struct dsmcc_stream *find_stream(struct dsmcc_state *state, int stream_se
 	{
 		str = find_stream_by_assoc_tag(state->streams, stream_selector);
 		if (str)
-			return str;
+        {
+            //ugly extra check in case assoc_tag isn't unique
+            //TODO in R7 case see stream specification, cause this check shouldn't be necessary
+            if(str->pid == default_pid){
+			    return str;
+            }
+            pid = default_pid;
+        }
 
 		if (state->callbacks.get_pid_for_assoc_tag)
 		{
