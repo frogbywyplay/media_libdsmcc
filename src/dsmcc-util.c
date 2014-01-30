@@ -99,6 +99,12 @@ bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int l
 		goto cleanup;
 	}
 
+	if (fchmod(dst, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH) < 0)
+	{
+		DSMCC_ERROR("Destination file fchmod error '%s': %s", tmpfile, strerror(errno));
+		goto cleanup;
+	}
+
 	DSMCC_DEBUG("Copying %d bytes from %s at offset %d to %s", length, srcfile, offset, tmpfile);
 
 	while (length > 0)
