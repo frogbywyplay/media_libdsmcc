@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.60)
-AC_INIT([dsmcc], [3.1.2], [dev@wyplay.com])
+AC_INIT([dsmcc], [3.1.3], [dev@wyplay.com])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src/dsmcc.c])
 AC_CONFIG_HEADERS([src/dsmcc-config.h])
