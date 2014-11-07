@@ -234,7 +234,7 @@ static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *da
 		off += dsi_data_length;
 
 		/* Check if carousel was updated */
-		if (carousel->dsi_transaction_id)
+		if (carousel->dsi_transaction_id != 0xFFFFFFFF)
 		{
 			if (carousel->cid != gateway_ior.profile_body.obj_loc.carousel_id)
 			{

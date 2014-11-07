@@ -29,8 +29,10 @@ static void stop_carousel(struct dsmcc_object_carousel *carousel)
 	dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DII);
 	dsmcc_stream_queue_remove(carousel, DSMCC_QUEUE_ENTRY_DDB);
 	dsmcc_timeout_remove_all(carousel);
-	carousel->dsi_transaction_id = 0;
-	carousel->dii_transaction_id = 0;
+
+	/* set default unknown value for transaction ids */
+	carousel->dsi_transaction_id = 0xFFFFFFFF;
+	carousel->dii_transaction_id = 0xFFFFFFFF;
 	if (carousel->status == DSMCC_STATUS_DOWNLOADING)
 	{
 		dsmcc_object_carousel_set_status(carousel, DSMCC_STATUS_PARTIAL);
@@ -100,6 +102,10 @@ void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_i
 		carousel->requested_pid = pid;
 		carousel->requested_transaction_id = transaction_id;
 		state->carousels = carousel;
+
+		/* set default unknown value for transaction ids */
+		carousel->dsi_transaction_id = 0xFFFFFFFF;
+		carousel->dii_transaction_id = 0xFFFFFFFF;
 	}
 
 	start_carousel(carousel);

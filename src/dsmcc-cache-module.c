@@ -319,7 +319,8 @@ static void update_carousel_completion(struct dsmcc_object_carousel *carousel, s
 	uint32_t downloaded, total;
 	int complete;
 
-	if (carousel->dsi_transaction_id && (carousel->type == DSMCC_OBJECT_CAROUSEL ? carousel->dii_transaction_id : (unsigned)carousel->group_list))
+	if ((carousel->dsi_transaction_id != 0xFFFFFFFF) && (carousel->type == DSMCC_OBJECT_CAROUSEL ?
+		(carousel->dii_transaction_id != 0xFFFFFFFF) : (unsigned)carousel->group_list))
 	{
 		complete = 1;
 		downloaded = total = 0;
