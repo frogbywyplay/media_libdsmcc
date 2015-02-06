@@ -36,6 +36,8 @@ noinst_HEADERS = \
 	dsmcc-ts.h \
 	dsmcc-util.h
 
+AM_LDFLAGS = -lrt
+
 if HAVE_ZLIB
 libdsmcc_la_LIBADD += -lz
 libdsmcc_la_SOURCES += \

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
 
 #include "dsmcc.h"
 #include "dsmcc-util.h"
@@ -77,9 +78,16 @@ static void clear_single_carousel(struct dsmcc_state *state, uint32_t carousel_i
 	}
 }
 
+void timespec_to_timeval(struct timespec *ts, struct timeval *tv)
+{
+    tv->tv_sec  = ts->tv_sec;
+    tv->tv_usec = ts->tv_nsec / 1000;
+}
+
 void *dsmcc_thread_func(void *arg)
 {
 	struct dsmcc_state *state = (struct dsmcc_state *) arg;
+	struct timespec ts;
 
 	while (1)
 	{
@@ -101,7 +109,9 @@ void *dsmcc_thread_func(void *arg)
 				{
 					struct timeval curtime;
 					struct timeval waittime;
-					gettimeofday(&curtime, NULL);
+
+					clock_gettime(CLOCK_MONOTONIC, &ts);
+					timespec_to_timeval(&ts, &curtime);
 					timersub(waketime, &curtime, &waittime);
 					DSMCC_DEBUG("Waiting %d.%06d second(s) for wakeup", waittime.tv_sec, waittime.tv_usec);
 				}
@@ -189,7 +199,8 @@ void *dsmcc_thread_func(void *arg)
 			{
 				struct timeval curtime;
 
-				gettimeofday(&curtime, NULL);
+				clock_gettime(CLOCK_MONOTONIC, &ts);
+				timespec_to_timeval(&ts, &curtime);
 
 				if (dsmcc_log_enabled(DSMCC_LOG_DEBUG))
 				{
@@ -528,6 +539,7 @@ void dsmcc_timeout_set(struct dsmcc_object_carousel *carousel, int type, uint16_
 	struct dsmcc_timeout *timeout;
 	struct dsmcc_timeout *current, *next;
 	struct timeval now, delay;
+	struct timespec ts;
 
 	dsmcc_timeout_remove(carousel, type, module_id);
 
@@ -541,7 +553,9 @@ void dsmcc_timeout_set(struct dsmcc_object_carousel *carousel, int type, uint16_
 	timeout->type = type;
 	timeout->module_id = module_id;
 
-	gettimeofday(&now, NULL);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	timespec_to_timeval(&ts, &now);
+
 	delay.tv_sec = delay_us / 1000000;
 	delay.tv_usec = delay_us - delay.tv_sec * 1000000;
 	timeradd(&now, &delay, &timeout->abstime);
