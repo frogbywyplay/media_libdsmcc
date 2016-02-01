@@ -229,7 +229,7 @@ bool dsmcc_file_write_block(const char *dstfile, int offset, uint8_t *data, int 
 	int fd;
 	ssize_t wret;
 
-	fd = open(dstfile, O_WRONLY | O_CREAT, 0660);
+	fd = open(dstfile, O_WRONLY | O_CREAT | O_EXCL, 0660);
 	if (fd < 0)
 	{
 		DSMCC_ERROR("Can't open file for writing '%s': %s", dstfile, strerror(errno));
