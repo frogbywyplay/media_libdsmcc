@@ -336,7 +336,7 @@ static int parse_dir(struct biop_msg **firstmsg, struct biop_msg **lastmsg, bool
 	{
 		struct dsmcc_object_id id;
 		struct biop_binding binding;
-	       
+
 		ret = parse_binding(&binding, data + off, data_length - off);
 		if (ret < 0)
 		{
@@ -349,28 +349,36 @@ static int parse_dir(struct biop_msg **firstmsg, struct biop_msg **lastmsg, bool
 		id.key = binding.ior.profile_body.obj_loc.key;
 		id.key_mask = binding.ior.profile_body.obj_loc.key_mask;
 
-		if (!strcmp("dir", binding.name.kind))
+		if ((binding.name.kind != NULL) && (strlen(binding.name.kind) >= 3))
 		{
-			if (binding.binding_type != BINDING_TYPE_NCONTEXT)
+			if (!strncmp("dir", dsmcc_tolower(binding.name.kind), 3))
 			{
-				DSMCC_ERROR("Invalid binding type for Directory (got %hhu but expected %hhu)", binding.binding_type, BINDING_TYPE_NCONTEXT);
-				free_binding_data(&binding);
-				goto error;
+				if (binding.binding_type != BINDING_TYPE_NCONTEXT)
+				{
+					DSMCC_ERROR("Invalid binding type for Directory (got %hhu but expected %hhu)", binding.binding_type, BINDING_TYPE_NCONTEXT);
+					free_binding_data(&binding);
+					goto error;
+				}
+				add_dentry(msg, 1, &id, binding.name.id);
 			}
-			add_dentry(msg, 1, &id, binding.name.id);
-		}
-		else if (!strcmp("fil", binding.name.kind))
-		{
-			if (binding.binding_type != BINDING_TYPE_NOBJECT)
+			else if (!strncmp("fil", dsmcc_tolower(binding.name.kind), 3))
 			{
-				DSMCC_ERROR("Invalid binding type for File (got %hhu but expected %hhu)", binding.binding_type, BINDING_TYPE_NOBJECT);
-				free_binding_data(&binding);
-				goto error;
+				if (binding.binding_type != BINDING_TYPE_NOBJECT)
+				{
+					DSMCC_ERROR("Invalid binding type for File (got %hhu but expected %hhu)", binding.binding_type, BINDING_TYPE_NOBJECT);
+					free_binding_data(&binding);
+					goto error;
+				}
+				add_dentry(msg, 0, &id, binding.name.id);
 			}
-			add_dentry(msg, 0, &id, binding.name.id);
 		}
 		else
-			DSMCC_WARN("Skipping unknown object id '%s' kind '%s'", binding.name.id, binding.name.kind);
+		{
+			if (binding.name.kind != NULL)
+				DSMCC_WARN("Skipping unknown object id '%s' kind '%s'", binding.name.id, binding.name.kind);
+			else
+				DSMCC_ERROR("'kind' field is NULL, object id is '%s'", binding.name.id);
+		}
 
 		free_binding_data(&binding);
 	}

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -67,6 +68,19 @@ uint32_t dsmcc_crc32(uint8_t *data, uint32_t len)
 		crc = (crc << 8) ^ crc_table[((crc >> 24) ^ *data++) & 0xff];
 
 	return crc;
+}
+
+char *dsmcc_tolower(char *s)
+{
+    uint32_t i = 0;
+
+    if (s != NULL) {
+        for (i = 0; i < strlen(s); i++)
+            s[i] = tolower(s[i]);
+    } else {
+        return NULL;
+    }
+    return s;
 }
 
 bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int length)
