@@ -1,6 +1,10 @@
 libdsmcc changelog file.
 Last Modification Date: 30/01/2014
 
+3.1.6 -- 21/03/2017
+- for BIOP SRG and DIR messages, broaden test on binding kind
+  to match 'dir' and 'fil' with any character in uppercase
+
 3.1.5 -- 06/02/2014
 - Use clockgettime with CLOCK_MONOTONIC instead of gettimeofday
 
