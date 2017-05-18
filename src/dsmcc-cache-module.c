@@ -366,7 +366,7 @@ static void process_module(struct dsmcc_object_carousel *carousel, struct dsmcc_
 	int ret;
 	char *data_file;
 	uint32_t size;
-	struct biop_msg *messages, *msg;
+	struct biop_msg *messages = NULL, *msg = NULL;
 	struct biop_msg_file allmodfile;
 
 	if (module->state != DSMCC_MODULE_STATE_PARTIAL)

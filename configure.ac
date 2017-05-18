@@ -49,7 +49,7 @@ if test x$en_debug == xyes ; then
    CXXFLAGS=$CFLAGS
 else
    AM_CONDITIONAL([DEBUG], false)
-   CFLAGS="$CFLAGS -W -Wall -Werror -DNDEBUG"
+   CFLAGS="$CFLAGS -W -Wall -DNDEBUG"
    CXXFLAGS=$CFLAGS
 fi
 
