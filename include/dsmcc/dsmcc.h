@@ -205,6 +205,13 @@ void dsmcc_cache_clear(struct dsmcc_state *state);
   */
 void dsmcc_cache_clear_carousel(struct dsmcc_state *state, uint32_t carousel_id);
 
+/** \brief get the transaction id from DSI using a queue id
+  * \param state the library state
+  * \param queue_id the queue ID that was returned by dsmcc_queue_carousel
+  * \return the transaction identifier
+  */
+uint32_t dsmcc_transaction_id(struct dsmcc_state *state, uint32_t queue_id);
+
 /** \} */ // end of 'cache' group
 
 #ifdef __cplusplus

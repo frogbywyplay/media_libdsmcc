@@ -266,3 +266,19 @@ error:
 	return 0;
 }
 
+uint32_t dsmcc_object_carousel_get_transaction_id(struct dsmcc_state *state, uint32_t queue_id)
+{
+	struct dsmcc_object_carousel *carousel;
+	struct dsmcc_file_cache *filecache;
+
+	for (carousel = state->carousels; carousel; carousel = carousel->next)
+	{
+		filecache = dsmcc_filecache_find(carousel, queue_id);
+		if (filecache)
+		{
+			return dsmcc_filecache_transaction_id(filecache);
+		}
+	}
+	return 0;
+}
+

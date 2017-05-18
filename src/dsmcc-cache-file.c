@@ -651,3 +651,8 @@ void dsmcc_filecache_notify_status(struct dsmcc_object_carousel *carousel, struc
 			dsmcc_filecache_notify_status(carousel, filecache);
 	}
 }
+
+uint32_t dsmcc_filecache_transaction_id(struct dsmcc_file_cache *filecache)
+{
+	return filecache ? filecache->carousel ? filecache->carousel->dsi_transaction_id : 0 : 0;
+}

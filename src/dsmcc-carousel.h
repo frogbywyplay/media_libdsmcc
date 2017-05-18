@@ -33,5 +33,6 @@ bool dsmcc_object_carousel_save_all(FILE *file, struct dsmcc_state *state);
 void dsmcc_object_carousel_free(struct dsmcc_object_carousel *carousel, bool keep_cache);
 void dsmcc_object_carousel_free_all(struct dsmcc_state *state, bool keep_cache);
 void dsmcc_object_carousel_set_status(struct dsmcc_object_carousel *carousel, int newstatus);
+uint32_t dsmcc_object_carousel_get_transaction_id(struct dsmcc_state *state, uint32_t queue_id);
 
 #endif

@@ -693,3 +693,8 @@ void dsmcc_cache_clear_carousel(struct dsmcc_state *state, uint32_t carousel_id)
 	action->cache_clear_carousel.carousel_id = carousel_id;
 	buffer_action(state, action);
 }
+
+uint32_t dsmcc_transaction_id(struct dsmcc_state *state, uint32_t queue_id)
+{
+	return dsmcc_object_carousel_get_transaction_id(state, queue_id);
+}
