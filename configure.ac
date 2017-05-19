@@ -58,15 +58,24 @@ AC_ARG_ENABLE(tools, AC_HELP_STRING([--enable-tools], [turn on tools (default=en
    [ en_tools=$enableval ], [ en_tools=yes ])
 AM_CONDITIONAL([TOOLS], test x$en_tools == xyes)
 
+######## ignore-private-indicator ########
+AC_ARG_ENABLE(ignore-private-indicator,
+    AC_HELP_STRING([--enable-ignore-private-indicator], [turn on ignoring of private_indicator bit in section header (default=disabled)]),
+    [ en_ignore_private_indicator=$enableval ], [ en_ignore_private_indicator=no ])
+AM_CONDITIONAL([IGNORE_PRIVATE_INDICATOR], test x$en_ignore_private_indicator == xyes)
+AS_IF([test x$en_ignore_private_indicator = xyes],
+      [AC_DEFINE([IGNORE_PRIVATE_INDICATOR], [1], [turn on ignoring of private_indicator bit in section header])])
+
 # REQUIRED_PKG_CONFIG can be used inside dsmcc.pc.in file
 AC_SUBST([REQUIRED_PKG_CONFIG], ${REQUIRED_PKG_CONFIG})
 AC_CONFIG_FILES([ Makefile Doxyfile include/Makefile src/Makefile tools/Makefile dsmcc.pc ])
 
 ######## Summary of configured options  ########
 AC_MSG_NOTICE([***** Summary *****])
-AC_MSG_NOTICE([DSMCC DEBUG          : $en_debug])
-AC_MSG_NOTICE([DSMCC ZLIB           : $en_zlib])
-AC_MSG_NOTICE([DSMCC TOOLS          : $en_tools])
+AC_MSG_NOTICE([DSMCC DEBUG                    : $en_debug])
+AC_MSG_NOTICE([DSMCC ZLIB                     : $en_zlib])
+AC_MSG_NOTICE([DSMCC TOOLS                    : $en_tools])
+AC_MSG_NOTICE([DSMCC IGNORE PRIVATE INDICATOR : $en_ignore_private_indicator])
 
 AC_OUTPUT
 

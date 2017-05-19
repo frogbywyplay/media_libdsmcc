@@ -65,8 +65,12 @@ static int parse_section_header(struct dsmcc_section_header *header, uint8_t *da
 	/* Check CRC is set and private_indicator is set to its complement, else skip packet */
 	if (!(section_syntax_indicator ^ private_indicator))
 	{
+#ifdef IGNORE_PRIVATE_INDICATOR
+		DSMCC_DEBUG("In section header: section_syntax_indicator and private_indicator flags are not complements (%d/%d)", section_syntax_indicator, private_indicator);
+#else
 		DSMCC_ERROR("Invalid section header: section_syntax_indicator and private_indicator flags are not complements (%d/%d)", section_syntax_indicator, private_indicator);
 		return -1;
+#endif
 	}
 
 	/* Check CRC */
