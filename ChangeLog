@@ -1,6 +1,9 @@
 libdsmcc changelog file.
 Last Modification Date: 30/01/2014
 
+3.1.8 -- 24/05/2017
+- if parameter enabled, ignore private_indicator bit in section header (default: disabled)
+
 3.1.7 -- 19/05/2017
 - Get transaction_id from DSI
 
