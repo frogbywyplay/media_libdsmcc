@@ -18,6 +18,10 @@ extern "C" {
  *  \{
  */
 
+#define DEFAULT_TID 0x38
+#define DEFAULT_SECTION_CONTROL_TABLE_ID 0x3B
+#define DEFAULT_SECTION_DATA_TABLE_ID 0x3C
+
 /** The different log levels */
 enum
 {
@@ -76,6 +80,27 @@ struct dsmcc_dvb_callbacks
 	int (*add_section_filter)(void *arg, uint16_t pid, uint8_t *pattern, uint8_t *equalmask, uint8_t *notequalmask, uint16_t depth);
 	/** argument for add_section_filter callback */
 	void *add_section_filter_arg;
+};
+
+/** \brief structure used to pass parameters to function
+  * \param type DSMCC_DATA_CAROUSEL or DSMCC_OBJECT_CAROUSEL
+  * \param pid the PID of the stream where the carousel DSI message is broadcasted
+  * \param tid table ID used to filter DSMCC sections
+  * \param section_control_table_id table ID for DSI and DII messages
+  * \param section_data_table_id table ID for DDB messages
+  * \param transaction_id the transaction ID of the carousel DSI message or 0xFFFFFFFF to use the first DSI message found on the stream
+  * \param downloadpath the directory where the carousel files will be downloaded
+  */
+struct dsmcc_parameters
+{
+	int type;
+	uint16_t pid;
+	uint8_t tid;
+	uint8_t section_control_table_id;
+	uint8_t section_data_table_id;
+	uint8_t skip_leading_bytes;
+	uint32_t transaction_id;
+	char *downloadpath;
 };
 
 /** Opaque type containing the library state */
@@ -167,15 +192,11 @@ struct dsmcc_carousel_callbacks
 
 /** \brief Add a carousel to the list of carousels to be downloaded
   * \param state the library state
-  * \param DSMCC_DATA_CAROUSEL or DSMCC_OBJECT_CAROUSEL
-  * \param pid the PID of the stream where the carousel DSI message is broadcasted
-  * \param transaction_id the transaction ID of the carousel DSI message or 0xFFFFFFFF to use the first DSI message found on the stream
-  * \param downloadpath the directory where the carousel files will be downloaded
+  * \param parameters structure containing parameters for a given carousel
   * \param callbacks the callback that will be called during/after carousel download
   * \return a carousel queue ID that will be used to remove the carousel
   */
-uint32_t dsmcc_queue_carousel2(struct dsmcc_state *state, int type, 
-		uint16_t pid, uint32_t transaction_id,	const char *downloadpath,
+uint32_t dsmcc_queue_carousel2(struct dsmcc_state *state, struct dsmcc_parameters *parameters,
 		struct dsmcc_carousel_callbacks *callbacks);
 
 /** \brief deprecated API for compatibility */

@@ -186,6 +186,7 @@ int main(int argc, char **argv)
 	struct dsmcc_tsparser_buffer *buffers = NULL;
 	struct dsmcc_dvb_callbacks dvb_callbacks;
 	struct dsmcc_carousel_callbacks car_callbacks;
+	struct dsmcc_parameters *parameters;
 
 	if(argc < 4)
 	{
@@ -241,7 +242,21 @@ int main(int argc, char **argv)
 		car_callbacks.dentry_saved = &dentry_saved;
 		car_callbacks.download_progression = &download_progression;
 		car_callbacks.carousel_status_changed = &carousel_status_changed;
-		qid = dsmcc_queue_carousel2(state, carousel_type, pid, 0, downloadpath, &car_callbacks);
+
+		parameters = malloc(sizeof(struct dsmcc_parameters));
+		parameters->type = carousel_type;
+		parameters->pid = pid;
+		parameters->tid = DEFAULT_TID;
+		parameters->section_control_table_id = DEFAULT_SECTION_CONTROL_TABLE_ID;
+		parameters->section_data_table_id = DEFAULT_SECTION_DATA_TABLE_ID;
+		parameters->skip_leading_bytes = 0;
+		parameters->transaction_id = 0;
+		parameters->downloadpath = strdup(downloadpath);
+
+		qid = dsmcc_queue_carousel2(state, parameters, &car_callbacks);
+
+		free(parameters->downloadpath);
+		free(parameters);
 
 		status = parse_stream(ts, state, &buffers);
 

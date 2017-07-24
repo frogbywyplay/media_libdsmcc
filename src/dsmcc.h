@@ -66,11 +66,8 @@ struct dsmcc_action
 
 	union {
 		struct {
-			int type;
 			uint32_t queue_id;
-			uint16_t pid;
-			uint32_t transaction_id;
-			char *downloadpath;
+			struct dsmcc_parameters *parameters;
 			struct dsmcc_carousel_callbacks callbacks;
 		} add_carousel;
 
