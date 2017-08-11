@@ -98,10 +98,13 @@ static int parse_section_header(struct dsmcc_section_header *header, uint8_t *da
  * returns number of bytes to skip to get to next data or -1 on error
  * ETSI TR 101 202 Table A.1
  */
-static int parse_message_header(struct dsmcc_message_header *header, uint8_t *data, int data_length)
+static int parse_message_header(struct dsmcc_message_header *header, uint8_t *data, int data_length,
+                                uint8_t skip_leading_bytes)
 {
 	int off = 0;
 	uint8_t protocol, type, adaptation_length;
+
+	off += skip_leading_bytes;
 
 	if (!dsmcc_getbyte(&protocol, data, off, data_length))
 		return -1;
@@ -287,7 +290,7 @@ static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *da
 	/* add section filter on stream for DII (table_id == 0x3B, table_id_extension != 0x0000 or 0x0001) */
 	if (carousel->state->callbacks.add_section_filter && stream)
 	{
-		uint8_t pattern[3]  = { 0x3B, 0x00, 0x00 };
+		uint8_t pattern[3]  = { carousel->section_control_table_id, 0x00, 0x00 };
 		uint8_t equal[3]    = { 0xff, 0x00, 0x00 };
 		uint8_t notequal[3] = { 0x00, 0xff, 0xfe };
 		(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg, stream->pid, pattern, equal, notequal, 3);
@@ -443,7 +446,7 @@ static int parse_section_dii(struct dsmcc_object_carousel *carousel, uint8_t *da
 				uint8_t pattern[4];
 				uint8_t equal[4]    = { 0xff, 0xff, 0xff, 0x3e }; /* bits 2-6 */
 				uint8_t notequal[4] = { 0x00, 0x00, 0x00, 0x00 };
-				pattern[0] = 0x3C;
+				pattern[0] = carousel->section_data_table_id;
 				pattern[1] = (modules_id[i].module_id >> 8) & 0xff;
 				pattern[2] = modules_id[i].module_id & 0xff;
 				pattern[3] = (modules_id[i].module_version & 0x1f) << 1;
@@ -471,14 +474,15 @@ error:
 	return -1;
 }
 
-static int parse_section_control(struct dsmcc_stream *stream, uint8_t *data, int data_length)
+static int parse_section_control(struct dsmcc_stream *stream, uint8_t *data, int data_length,
+                                 uint8_t skip_leading_bytes)
 {
 	struct dsmcc_message_header header;
 	int off = 0, ret;
 	struct dsmcc_object_carousel *carousel;
 	struct dsmcc_group_list *grp;
 
-	ret = parse_message_header(&header, data, data_length);
+	ret = parse_message_header(&header, data, data_length, skip_leading_bytes);
 	if (ret < 0)
 		return -1;
 	off += ret;
@@ -564,15 +568,19 @@ static int parse_section_control(struct dsmcc_stream *stream, uint8_t *data, int
 /*
  * ETSI TR 101 202 Table A.2
  */
-static int parse_data_header(struct dsmcc_data_header *header, uint8_t *data, int data_length)
+static int parse_data_header(struct dsmcc_data_header *header, uint8_t *data, int data_length,
+                             uint8_t skip_leading_bytes)
 {
 	int off = 0;
 	uint8_t protocol, type, adaptation_length;
 	uint16_t message_id;
 
+	off += skip_leading_bytes;
+
 	if (!dsmcc_getbyte(&protocol, data, off, data_length))
 		return -1;
 	off++;
+
 	if (protocol != 0x11)
 	{
 		DSMCC_ERROR("Data Header: invalid protocol 0x%hhx (expected 0x%x)", protocol, 0x11);
@@ -668,7 +676,8 @@ static int parse_section_ddb(struct dsmcc_object_carousel *carousel, struct dsmc
 	return off;
 }
 
-static int parse_section_data(struct dsmcc_stream *stream, uint8_t *data, int data_length)
+static int parse_section_data(struct dsmcc_stream *stream, uint8_t *data, int data_length,
+                              uint8_t skip_leading_bytes)
 {
 	struct dsmcc_data_header header;
 	int off = 0, ret;
@@ -676,7 +685,7 @@ static int parse_section_data(struct dsmcc_stream *stream, uint8_t *data, int da
 
 	DSMCC_DEBUG("Parsing DDB section for stream with PID 0x%hx", stream->pid);
 
-	ret = parse_data_header(&header, data, data_length);
+	ret = parse_data_header(&header, data, data_length, skip_leading_bytes);
 	if (ret < 0)
 		return -1;
 	off += ret;
@@ -701,6 +710,8 @@ int dsmcc_parse_section(struct dsmcc_state *state, struct dsmcc_section *section
 	int off = 0, ret;
 	struct dsmcc_section_header header;
 	struct dsmcc_stream *stream;
+	struct dsmcc_object_carousel *carousel;
+	uint8_t section_control_table_id, section_data_table_id, skip_leading_bytes;
 
 	stream = dsmcc_stream_find_by_pid(state, section->pid);
 	if (!stream)
@@ -720,23 +731,38 @@ int dsmcc_parse_section(struct dsmcc_state *state, struct dsmcc_section *section
 		return 0;
 	}
 
+	carousel = find_carousel_by_requested_pid(state, section->pid);
+	if (carousel)
+	{
+		section_control_table_id = carousel->section_control_table_id;
+		section_data_table_id = carousel->section_data_table_id;
+		skip_leading_bytes = carousel->skip_leading_bytes;
+	}
+	else
+	{
+		section_control_table_id = DEFAULT_SECTION_CONTROL_TABLE_ID;
+		section_data_table_id = DEFAULT_SECTION_DATA_TABLE_ID;
+		skip_leading_bytes = 0;
+	}
+
 	DSMCC_DEBUG("Processing section: PID 0x%hx length %hu", section->pid, header.length);
 
-	switch (header.table_id)
+	if (header.table_id == section_control_table_id)
 	{
-		case 0x3B:
 			DSMCC_DEBUG("DSI/DII Section");
-			ret = parse_section_control(stream, section->data + off, header.length);
+			ret = parse_section_control(stream, section->data + off, header.length, skip_leading_bytes);
 			if (ret < 0)
 				return 0;
-			break;
-		case 0x3C:
+	}
+	else if (header.table_id == section_data_table_id)
+	{
 			DSMCC_DEBUG("DDB Section");
-			ret = parse_section_data(stream, section->data + off, header.length);
+			ret = parse_section_data(stream, section->data + off, header.length, skip_leading_bytes);
 			if (ret < 0)
 				return 0;
-			break;
-		default:
+	}
+	else
+	{
 			DSMCC_ERROR("Unknown section (table ID is 0x%02x)", header.table_id);
 			return 0;
 	}

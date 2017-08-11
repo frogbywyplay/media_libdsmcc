@@ -11,7 +11,7 @@
 
 #define CAROUSEL_CACHE_FILE_MAGIC 0xDDCC0002
 
-static struct dsmcc_object_carousel *find_carousel_by_requested_pid(struct dsmcc_state *state, uint16_t pid)
+struct dsmcc_object_carousel *find_carousel_by_requested_pid(struct dsmcc_state *state, uint16_t pid)
 {
 	struct dsmcc_object_carousel *carousel;
 
@@ -51,7 +51,7 @@ static void start_carousel(struct dsmcc_object_carousel *carousel)
 	/* add section filter on stream for DSI (table_id == 0x3B, table_id_extension == 0x0000 or 0x0001) */
 	if (carousel->state->callbacks.add_section_filter)
 	{
-		uint8_t pattern[3]  = { 0x3B, 0x00, 0x00 };
+		uint8_t pattern[3]  = { carousel->section_control_table_id, 0x00, 0x00 };
 		uint8_t equal[3]    = { 0xff, 0xff, 0xfe };
 		uint8_t notequal[3] = { 0x00, 0x00, 0x00 };
 		(*carousel->state->callbacks.add_section_filter)(carousel->state->callbacks.add_section_filter_arg,
@@ -85,22 +85,26 @@ void dsmcc_object_carousel_queue_remove(struct dsmcc_state *state, uint32_t queu
 		stop_carousel(carousel);
 }
 
-void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_id, int type, uint16_t pid, uint32_t transaction_id,
-		const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
+void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_id,
+		struct dsmcc_parameters *parameters, struct dsmcc_carousel_callbacks *callbacks)
 {
 	struct dsmcc_object_carousel *carousel;
 	/* Check if carousel is already requested */
-	carousel = find_carousel_by_requested_pid(state, pid);
+	carousel = find_carousel_by_requested_pid(state, parameters->pid);
 	if (!carousel)
 	{
 		carousel = calloc(1, sizeof(struct dsmcc_object_carousel));
 		carousel->state = state;
 		carousel->status = DSMCC_STATUS_PARTIAL;
 		carousel->next = state->carousels;
-		carousel->type = type;
+		carousel->type = parameters->type;
 		carousel->group_list = NULL;
-		carousel->requested_pid = pid;
-		carousel->requested_transaction_id = transaction_id;
+		carousel->requested_pid = parameters->pid;
+		carousel->requested_transaction_id = parameters->transaction_id;
+		carousel->tid = parameters->tid;
+		carousel->section_control_table_id = parameters->section_control_table_id;
+		carousel->section_data_table_id = parameters->section_data_table_id;
+		carousel->skip_leading_bytes = parameters->skip_leading_bytes;
 		state->carousels = carousel;
 
 		/* set default unknown value for transaction ids */
@@ -109,7 +113,7 @@ void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_i
 	}
 
 	start_carousel(carousel);
-	dsmcc_filecache_add(carousel, queue_id, downloadpath, callbacks);
+	dsmcc_filecache_add(carousel, queue_id, parameters->downloadpath, callbacks);
 }
 
 #ifdef DEBUG

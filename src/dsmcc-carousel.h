@@ -18,6 +18,11 @@ struct dsmcc_object_carousel
 	uint32_t dsi_transaction_id;
 	uint32_t dii_transaction_id;
 
+	uint8_t tid;
+	uint8_t section_control_table_id;
+	uint8_t section_data_table_id;
+	uint8_t skip_leading_bytes;
+
 	struct dsmcc_module     *modules;
 	struct dsmcc_file_cache *filecaches;
 	struct dsmcc_group_list *group_list;
@@ -25,8 +30,9 @@ struct dsmcc_object_carousel
 	struct dsmcc_object_carousel *next;
 };
 
-void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_id, int type, uint16_t pid, uint32_t transaction_id,
-		const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks);
+struct dsmcc_object_carousel *find_carousel_by_requested_pid(struct dsmcc_state *state, uint16_t pid);
+void dsmcc_object_carousel_queue_add(struct dsmcc_state *state, uint32_t queue_id,
+		struct dsmcc_parameters *parameters, struct dsmcc_carousel_callbacks *callbacks);
 void dsmcc_object_carousel_queue_remove(struct dsmcc_state *state, uint32_t queue_id);
 bool dsmcc_object_carousel_load_all(FILE *file, struct dsmcc_state *state);
 bool dsmcc_object_carousel_save_all(FILE *file, struct dsmcc_state *state);
