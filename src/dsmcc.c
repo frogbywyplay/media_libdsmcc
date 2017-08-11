@@ -80,8 +80,8 @@ static void clear_single_carousel(struct dsmcc_state *state, uint32_t carousel_i
 
 void timespec_to_timeval(struct timespec *ts, struct timeval *tv)
 {
-    tv->tv_sec  = ts->tv_sec;
-    tv->tv_usec = ts->tv_nsec / 1000;
+	tv->tv_sec  = ts->tv_sec;
+	tv->tv_usec = ts->tv_nsec / 1000;
 }
 
 void *dsmcc_thread_func(void *arg)
@@ -255,8 +255,8 @@ struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsm
 	state->cachefile = malloc(strlen(state->cachedir) + 7);
 	sprintf(state->cachefile, "%s/state", state->cachedir);
 
-    if (keep_cache)
-	    load_state(state);
+	if (keep_cache)
+		load_state(state);
 
 	pthread_mutex_init(&state->mutex, NULL);
 	pthread_cond_init(&state->cond, NULL);
@@ -330,14 +330,14 @@ static struct dsmcc_stream *find_stream(struct dsmcc_state *state, int stream_se
 	{
 		str = find_stream_by_assoc_tag(state->streams, stream_selector);
 		if (str)
-        {
-            //ugly extra check in case assoc_tag isn't unique
-            //TODO in R7 case see stream specification, cause this check shouldn't be necessary
-            if(str->pid == default_pid){
-			    return str;
-            }
-            pid = default_pid;
-        }
+		{
+			//ugly extra check in case assoc_tag isn't unique
+			//TODO in R7 case see stream specification, cause this check shouldn't be necessary
+			if(str->pid == default_pid){
+				return str;
+			}
+			pid = default_pid;
+		}
 
 		if (state->callbacks.get_pid_for_assoc_tag)
 		{

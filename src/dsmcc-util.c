@@ -72,15 +72,15 @@ uint32_t dsmcc_crc32(uint8_t *data, uint32_t len)
 
 char *dsmcc_tolower(char *s)
 {
-    uint32_t i = 0;
+	uint32_t i = 0;
 
-    if (s != NULL) {
-        for (i = 0; i < strlen(s); i++)
-            s[i] = tolower(s[i]);
-    } else {
-        return NULL;
-    }
-    return s;
+	if (s != NULL) {
+		for (i = 0; i < strlen(s); i++)
+			s[i] = tolower(s[i]);
+	} else {
+		return NULL;
+	}
+	return s;
 }
 
 bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int length)

@@ -207,7 +207,7 @@ static int parse_service_gateway_info(struct biop_ior *gateway_ior, uint8_t *dat
  */
 static int parse_section_dsi(struct dsmcc_object_carousel *carousel, uint8_t *data, int data_length)
 {
-        int off = 0, ret;
+	int off = 0, ret;
 	uint16_t i, dsi_data_length;
 	struct biop_ior gateway_ior;
 	struct dsmcc_stream *stream = NULL;
