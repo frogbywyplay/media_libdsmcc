@@ -7,12 +7,17 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
+#include <limits.h>
 
 #include "dsmcc.h"
 #include "dsmcc-util.h"
 #include "dsmcc-carousel.h"
 #include "dsmcc-section.h"
 #include "dsmcc-cache-file.h"
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 struct dsmcc_queue_entry
 {
@@ -644,7 +649,12 @@ void dsmcc_add_section(struct dsmcc_state *state, uint16_t pid, uint8_t *data, i
 uint32_t dsmcc_queue_carousel2(struct dsmcc_state *state, struct dsmcc_parameters *parameters, struct dsmcc_carousel_callbacks *callbacks)
 {
 	struct dsmcc_action *action;
-	uint32_t queue_id;
+	uint32_t queue_id = 0;
+
+	if (strlen(parameters->downloadpath) > PATH_MAX) {
+		DSMCC_ERROR("Download path exceeds limit of %d characters", PATH_MAX);
+		return queue_id;
+	}
 
 	pthread_mutex_lock(&state->mutex);
 	queue_id = state->next_queue_id++;
@@ -655,7 +665,7 @@ uint32_t dsmcc_queue_carousel2(struct dsmcc_state *state, struct dsmcc_parameter
 	action->add_carousel.queue_id = queue_id;
 	action->add_carousel.parameters = malloc(sizeof(struct dsmcc_parameters));
 	*(action->add_carousel.parameters) = *parameters;
-	action->add_carousel.parameters->downloadpath = strdup(parameters->downloadpath);
+	action->add_carousel.parameters->downloadpath = strndup(parameters->downloadpath, strlen(parameters->downloadpath));
 	memcpy(&action->add_carousel.callbacks, callbacks, sizeof(struct dsmcc_carousel_callbacks));
 	buffer_action(state, action);
 
@@ -665,7 +675,13 @@ uint32_t dsmcc_queue_carousel2(struct dsmcc_state *state, struct dsmcc_parameter
 uint32_t dsmcc_queue_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t transaction_id, const char *downloadpath, struct dsmcc_carousel_callbacks *callbacks)
 {
 	struct dsmcc_parameters *parameters = malloc(sizeof(struct dsmcc_parameters));
-	uint32_t rc;
+	uint32_t rc = 0;
+
+	if (strlen(downloadpath) > PATH_MAX) {
+		DSMCC_ERROR("Download path exceeds limit of %d characters", PATH_MAX);
+		return rc;
+	}
+
 	parameters->type = DSMCC_OBJECT_CAROUSEL;
 	parameters->pid = pid;
 	parameters->tid = DEFAULT_TID;
@@ -673,7 +689,7 @@ uint32_t dsmcc_queue_carousel(struct dsmcc_state *state, uint16_t pid, uint32_t 
 	parameters->section_data_table_id = DEFAULT_SECTION_DATA_TABLE_ID;
 	parameters->skip_leading_bytes = 0;
 	parameters->transaction_id = transaction_id;
-	parameters->downloadpath = strdup(downloadpath);
+	parameters->downloadpath = strndup(downloadpath, strlen(downloadpath));
 
 	rc = dsmcc_queue_carousel2(state, parameters, callbacks);
 

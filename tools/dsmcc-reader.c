@@ -7,9 +7,14 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <limits.h>
 
 #include <dsmcc/dsmcc.h>
 #include <dsmcc/dsmcc-tsparser.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
 
 static int g_running = 1;
 static int g_complete = 0;
@@ -217,6 +222,11 @@ int main(int argc, char **argv)
 	sscanf(argv[2], "%hu", &pid);
 	downloadpath = argv[3];
 
+	if (strlen(downloadpath) > PATH_MAX) {
+		fprintf(stderr, "Download path exceeds limit of %d characters", PATH_MAX);
+		return -1;
+	}
+
 	signal(SIGINT, sigint_handler);
 
 	fprintf(stderr, "start\n");
@@ -251,7 +261,7 @@ int main(int argc, char **argv)
 		parameters->section_data_table_id = DEFAULT_SECTION_DATA_TABLE_ID;
 		parameters->skip_leading_bytes = 0;
 		parameters->transaction_id = 0;
-		parameters->downloadpath = strdup(downloadpath);
+		parameters->downloadpath = strndup(downloadpath, strlen(downloadpath));
 
 		qid = dsmcc_queue_carousel2(state, parameters, &car_callbacks);
 
