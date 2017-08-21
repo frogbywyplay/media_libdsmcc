@@ -1,7 +1,7 @@
 libdsmcc changelog file.
 Last Modification Date: 30/01/2014
 
-9999 -- 16/08/2017
+4.0.1 -- 21/08/2017
 - adding support of parameters tid, section_control_table_id and section_data_table_id
 to handle 'user private' table ID values in DSMCC sections for DSI/DII/DDB
 - adding constants for the default values of the 3 parameters listed above
