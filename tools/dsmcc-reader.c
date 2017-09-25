@@ -7,14 +7,11 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <sys/time.h>
-#include <limits.h>
+#include <linux/limits.h>
 
 #include <dsmcc/dsmcc.h>
 #include <dsmcc/dsmcc-tsparser.h>
 
-#ifndef PATH_MAX
-#define PATH_MAX 4096
-#endif
 
 static int g_running = 1;
 static int g_complete = 0;

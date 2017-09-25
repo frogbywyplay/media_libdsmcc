@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <time.h>
-#include <limits.h>
+#include <linux/limits.h>
 
 #include "dsmcc.h"
 #include "dsmcc-util.h"
@@ -15,9 +15,6 @@
 #include "dsmcc-section.h"
 #include "dsmcc-cache-file.h"
 
-#ifndef PATH_MAX
-#define PATH_MAX 4096
-#endif
 
 struct dsmcc_queue_entry
 {

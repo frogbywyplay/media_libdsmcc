@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <linux/limits.h>
 
 #include "dsmcc.h"
 #include "dsmcc-cache-file.h"
@@ -288,9 +289,14 @@ int dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, const char *f
 {
 	char *fn;
 	int written = 0;
-	
+
+	if ((strlen(file_path) > PATH_MAX) || (strlen(data_file) > PATH_MAX)) {
+		return written;
+	}
+
 	fn = malloc(strlen(filecache->downloadpath) + strlen(file_path) + 2);
-	sprintf(fn, "%s%s%s", filecache->downloadpath, file_path[0] == '/' ? "" : "/", file_path);
+
+	snprintf(fn, PATH_MAX, "%s%s%s", filecache->downloadpath, file_path[0] == '/' ? "" : "/", file_path);
 
 	if (filecache->callbacks.dentry_check)
 	{
@@ -305,7 +311,7 @@ int dsmcc_filecache_write_file(struct dsmcc_file_cache *filecache, const char *f
 	}
 
 	DSMCC_DEBUG("Linking data from %s to %s", data_file, fn);
-	if (dsmcc_file_link(fn, data_file, data_size))
+	if (dsmcc_file_link(fn, data_file, data_size, file_path))
 	{
 		written = 1;
 
@@ -380,7 +386,7 @@ static void write_dir(struct dsmcc_file_cache *filecache, struct dsmcc_cached_di
 	}
 
 	DSMCC_DEBUG("Creating directory %s", dn);
-	mkdir(dn, 0755); 
+	mkdir(dn, 0755);
 	dir->written = 1;
 
 	/* register and call callback (except for gateway) */

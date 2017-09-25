@@ -9,6 +9,9 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
+#include <linux/limits.h>
+
+#include <glib.h>
 
 #include "dsmcc-util.h"
 #include "dsmcc-debug.h"
@@ -185,18 +188,48 @@ cleanup:
 	return ret;
 }
 
-bool dsmcc_file_link(const char *dstfile, const char *srcfile, int length)
+bool dsmcc_file_link(const char *dstfile, const char *srcfile, int length, const char *relativeFile)
 {
-	char *tmpfile;
+	char *tmpfile = NULL;
 	int ret = 1;
 	struct stat s;
+	char *subdirpath = NULL;
+
+	if ((strlen(dstfile) > PATH_MAX) || (strlen(srcfile) > PATH_MAX) || (strlen(relativeFile) > PATH_MAX)) {
+		return 0;
+	}
 
 	tmpfile = malloc(strlen(dstfile) + 8);
-	sprintf(tmpfile, "%s.XXXXXX", dstfile);
+	snprintf(tmpfile, PATH_MAX, "%s.XXXXXX", dstfile);
 	if (!mktemp(tmpfile))
 		return 0;
 
 	DSMCC_DEBUG("Linking %s to %s", srcfile, tmpfile);
+	char *ptr = strrchr(relativeFile, '/');
+
+	// check there is at least one sub-directory in relativeFile
+	// relativeFile must be coherent with dstfile
+	if ((ptr != NULL) && ((ptr - relativeFile) > 0)) {
+
+		ptr = strrchr(tmpfile, '/');
+		if (ptr == NULL) {
+			DSMCC_ERROR("Wrong usage, dstfile (%s) has no '/' whilst relativeFile has (%s)",
+						dstfile, relativeFile);
+			ret = 0;
+			goto cleanup;
+		}
+		int subdirpath_length = ptr - tmpfile;
+		subdirpath =  malloc(subdirpath_length + 2);
+		strncpy(subdirpath, tmpfile, subdirpath_length + 1);
+		subdirpath[subdirpath_length + 1] = '\0';
+
+		gint dirmask = 01750;
+		if (g_mkdir_with_parents(subdirpath, dirmask) == -1) {
+			DSMCC_ERROR("Cannot create directory %s (%s)", subdirpath, strerror(errno));
+			ret = 0;
+			goto cleanup;
+		}
+	}
 	if (link(srcfile, tmpfile) < 0)
 	{
 		if (errno == EXDEV)
@@ -234,6 +267,8 @@ bool dsmcc_file_link(const char *dstfile, const char *srcfile, int length)
 		unlink(tmpfile);
 	}
 
+cleanup:
+	free(subdirpath);
 	free(tmpfile);
 	return ret;
 }

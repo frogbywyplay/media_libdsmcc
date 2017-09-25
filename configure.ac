@@ -37,6 +37,8 @@ else
    AC_SUBST([ZLIB_LIBS], [])
 fi
 
+PKG_CHECK_MODULES([glib], [glib-2.0 >= 2.28.8])
+
 ######## Debugging ########
 AH_TEMPLATE([DEBUG], [Support for debugging.])
 AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug], [turn on debugging (default=disabled)]),

@@ -44,6 +44,9 @@ libdsmcc_la_SOURCES += \
 	dsmcc-compress.c
 endif
 
+libdsmcc_la_CFLAGS = $(glib_CFLAGS)
+libdsmcc_la_LDFLAGS = $(glib_LIBS)
+
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src
