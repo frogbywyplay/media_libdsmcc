@@ -36,7 +36,9 @@ noinst_HEADERS = \
 	dsmcc-ts.h \
 	dsmcc-util.h
 
-AM_LDFLAGS = -lrt
+AM_LDFLAGS = \
+    -lrt \
+    $(glib_LIBS)
 
 if HAVE_ZLIB
 libdsmcc_la_LIBADD += -lz
@@ -44,9 +46,8 @@ libdsmcc_la_SOURCES += \
 	dsmcc-compress.c
 endif
 
-libdsmcc_la_CFLAGS = $(glib_CFLAGS)
-libdsmcc_la_LDFLAGS = $(glib_LIBS)
-
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
-	-I$(top_srcdir)/src
+	-I$(top_srcdir)/src \
+	$(glib_CFLAGS)
+
