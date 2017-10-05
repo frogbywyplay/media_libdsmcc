@@ -1,6 +1,9 @@
 libdsmcc changelog file.
 Last Modification Date: 30/01/2014
 
+9999 -- 05/10/2017
+- Fixed CFLAGS/LDFLAGS problem
+
 5.0.1 -- 03/10/2017
 - add support for bindings in BIOP SRG which contains a sub-directory in their file name
 
