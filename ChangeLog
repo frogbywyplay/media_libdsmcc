@@ -1,7 +1,7 @@
 libdsmcc changelog file.
 Last Modification Date: 30/01/2014
 
-9999 -- 05/10/2017
+5.0.2 -- 05/10/2017
 - Fixed CFLAGS/LDFLAGS problem
 
 5.0.1 -- 03/10/2017
