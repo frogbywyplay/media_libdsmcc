@@ -386,7 +386,7 @@ static void write_dir(struct dsmcc_file_cache *filecache, struct dsmcc_cached_di
 	}
 
 	DSMCC_DEBUG("Creating directory %s", dn);
-	mkdir(dn, 0755);
+	mkdir(dn, 0770);
 	dir->written = 1;
 
 	/* register and call callback (except for gateway) */

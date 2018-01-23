@@ -68,6 +68,17 @@ AM_CONDITIONAL([IGNORE_PRIVATE_INDICATOR], test x$en_ignore_private_indicator ==
 AS_IF([test x$en_ignore_private_indicator = xyes],
       [AC_DEFINE([IGNORE_PRIVATE_INDICATOR], [1], [turn on ignoring of private_indicator bit in section header])])
 
+######## tmp-overwriting ########
+AC_ARG_ENABLE(tmp-overwriting,
+    AC_HELP_STRING([--enable-tmp-overwriting], [turn on tmp overwriting, This option can be enabled ONLY AND SOLELY if DSM-CC compression is NOT
+    used at broadcasting time (default=disabled)]),
+    [ enable_tmp_overwriting=$enableval ], [ enable_tmp_overwriting=no ])
+AM_CONDITIONAL([TMP_OVERWRITING], test x$enable_tmp_overwriting == xyes)
+AS_IF([test x$enable_tmp_overwriting = xyes],
+      [AC_DEFINE([TMP_OVERWRITING], [1], [turn on tmp overwriting])])
+
+
+
 # REQUIRED_PKG_CONFIG can be used inside dsmcc.pc.in file
 AC_SUBST([REQUIRED_PKG_CONFIG], ${REQUIRED_PKG_CONFIG})
 AC_CONFIG_FILES([ Makefile Doxyfile include/Makefile src/Makefile tools/Makefile dsmcc.pc ])
@@ -78,6 +89,7 @@ AC_MSG_NOTICE([DSMCC DEBUG                    : $en_debug])
 AC_MSG_NOTICE([DSMCC ZLIB                     : $en_zlib])
 AC_MSG_NOTICE([DSMCC TOOLS                    : $en_tools])
 AC_MSG_NOTICE([DSMCC IGNORE PRIVATE INDICATOR : $en_ignore_private_indicator])
+AC_MSG_NOTICE([TMP OVERWRITING                : $enable_tmp_overwriting])
 
 AC_OUTPUT
 

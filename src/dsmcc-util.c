@@ -93,8 +93,13 @@ bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int l
 	char data_buf[4096];
 	int rsize, wsize, ret = 0;
 
+#ifndef TMP_OVERWRITING
 	tmpfile = malloc(strlen(dstfile) + 8);
 	sprintf(tmpfile, "%s.XXXXXX", dstfile);
+#else
+	int len = length;
+	tmpfile = (char*)srcfile;
+#endif
 
 	src = open(srcfile, O_RDONLY);
 	if (src < 0)
@@ -109,7 +114,11 @@ bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int l
 		goto cleanup;
 	}
 
+#ifndef TMP_OVERWRITING
 	dst = mkstemp(tmpfile);
+#else
+	dst = open(srcfile, O_WRONLY);
+#endif
 	if (dst < 0)
 	{
 		DSMCC_ERROR("Destination file open error '%s': %s", tmpfile, strerror(errno));
@@ -161,7 +170,9 @@ bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int l
 	if (length > 0)
 	{
 		DSMCC_DEBUG("Error occurred, deleting %s", tmpfile);
+#ifndef TMP_OVERWRITING
 		unlink(tmpfile);
+#endif
 		goto cleanup;
 	}
 	else
@@ -169,7 +180,19 @@ bool dsmcc_file_copy(const char *dstfile, const char *srcfile, int offset, int l
 		DSMCC_DEBUG("Renaming %s to %s", tmpfile, dstfile);
 		if(!rename(tmpfile, dstfile))
 		{
+#ifndef TMP_OVERWRITING
 			ret = 1;
+#else
+			if (!truncate(dstfile, len))
+			{
+				ret = 1;
+			}
+			else
+			{
+				DSMCC_ERROR("Truncate error '%s' : %s", dstfile, strerror(errno));
+				ret = 0;
+			}
+#endif
 		}
 		else
 		{
@@ -183,7 +206,9 @@ cleanup:
 		close(dst);
 	if (src > 0)
 		close(src);
+#ifndef TMP_OVERWRITING
 	free(tmpfile);
+#endif
 
 	return ret;
 }
