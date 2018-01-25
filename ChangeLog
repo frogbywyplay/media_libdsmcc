@@ -1,6 +1,9 @@
 libdsmcc changelog file.
 Last Modification Date: 30/01/2014
 
+9999 -- 25/01/2018
+- Add option tmp-overwriting
+
 5.0.2 -- 05/10/2017
 - Fixed CFLAGS/LDFLAGS problem
 
