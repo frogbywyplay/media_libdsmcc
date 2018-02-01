@@ -251,7 +251,7 @@ struct dsmcc_state *dsmcc_open(const char *cachedir, bool keep_cache, struct dsm
 	}
 	else
 		state->cachedir = strdup(cachedir);
-	mkdir(state->cachedir, 0755);
+	mkdir(state->cachedir, 0770);
 	state->keep_cache = keep_cache;
 
 	state->cachefile = malloc(strlen(state->cachedir) + 7);

@@ -248,7 +248,7 @@ bool dsmcc_file_link(const char *dstfile, const char *srcfile, int length, const
 		strncpy(subdirpath, tmpfile, subdirpath_length + 1);
 		subdirpath[subdirpath_length + 1] = '\0';
 
-		gint dirmask = 01750;
+		gint dirmask = 01770;
 		if (g_mkdir_with_parents(subdirpath, dirmask) == -1) {
 			DSMCC_ERROR("Cannot create directory %s (%s)", subdirpath, strerror(errno));
 			ret = 0;
