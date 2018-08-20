@@ -533,7 +533,13 @@ bool dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct 
 	DSMCC_DEBUG("Saving info for Module 0x%04hx Version 0x%02hhx", module_id->module_id, module_id->module_version);
 
 	if (!module)
+	{
 		module = calloc(1, sizeof(struct dsmcc_module));
+		module->next = carousel->modules;
+		if (module->next)
+			module->next->prev = module;
+		carousel->modules = module;
+	}
 	module->state = DSMCC_MODULE_STATE_PARTIAL;
 	memcpy(&module->id, module_id, sizeof(struct dsmcc_module_id));
 	module->module_size = module_info->module_size;
@@ -553,11 +559,6 @@ bool dsmcc_cache_add_module_info(struct dsmcc_object_carousel *carousel, struct 
 	module->data.partial.data_file = malloc(strlen(carousel->state->cachedir) + 18);
 	sprintf(module->data.partial.data_file, "%s/%08x-%04hx-%02hhx", carousel->state->cachedir, carousel->cid, module->id.module_id, module->id.module_version);
 	unlink(module->data.partial.data_file);
-
-	module->next = carousel->modules;
-	if (module->next)
-		module->next->prev = module;
-	carousel->modules = module;
 
 	return 0;
 }
