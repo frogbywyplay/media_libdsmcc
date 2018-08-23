@@ -1,6 +1,9 @@
 libdsmcc changelog file.
 Last Modification Date: 30/01/2014
 
+5.0.5 -- 23/08/2018
+- Fix deadlock due to infinite loop in linked list.
+
 5.0.4 -- 01/02/2018
 - Fix rights during directory creation 
 
